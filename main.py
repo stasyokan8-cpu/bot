@@ -15,8 +15,9 @@ from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ContextTypes, filters
 )
+import os
 
-TOKEN = "1667037381:AAFdA7l6LcMidWsgrerdOkpBXfNF2gbNsvo"
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 ADMIN_USERNAME = "BeellyKid"
 DATA_FILE = "santa_data.json"
 
@@ -576,5 +577,8 @@ TOP_TEMPLATE = """
 🥈 {} — {} очков
 🥉 {} — {} очков
 """
-
+if TOKEN is None:
+    print("❌ TELEGRAM_BOT_TOKEN not set!")
+else:
+    print("✅ Token OK, starting bot...")
 
