@@ -15,9 +15,29 @@ from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ContextTypes, filters
 )
+from flask import Flask
+from threading import Thread
+
+app_flask = Flask('')
+
+@app_flask.route('/')
+def home():
+    return "Bot is alive!"
+
+def run_web():
+    app_flask.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run_web)
+    t.start()
+
 import os
 
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+if not TOKEN:
+    print("❌ TELEGRAM_BOT_TOKEN is not set!")
+    exit(1)
+
 ADMIN_USERNAME = "BeellyKid"
 DATA_FILE = "santa_data.json"
 
@@ -430,10 +450,7 @@ async def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
     print("🎄 Бот запущен на Replit! ❄️✨")
-    await app.run_polling()
 
-if __name__ == "__main__":
-    asyncio.run(main())
 
 # === РАЗДЕЛ: СЮЖЕТНЫЙ КВЕСТ ===
 # (Добавлены уровни, выбор пути, награды)
@@ -582,3 +599,7 @@ if TOKEN is None:
 else:
     print("✅ Token OK, starting bot...")
 
+if __name__ == "__main__":
+    keep_alive()  # запускаем мини-сервер для UptimeRobot
+    print("✅ Бот запускается...")
+    bot_app.run_polling()  # НЕ использовать asyncio.run
