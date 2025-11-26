@@ -230,34 +230,56 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # (полный обработчик всех callback_data — 100% как у тебя)
 
 # ====================== НАПОМИНАНИЯ ======================
-async def reminders(app):
+async def reminder_loop(app: Application):
     while True:
-        await asyncio.sleep(3600)
+        await asyncio.sleep(3600)  # каждые 60 минут
         data = load_data()
+        now = datetime.utcnow()
         for code, room in data["rooms"].items():
-            if room.get("game_started"): continue
+            if room.get("game_started"):
+                continue
             try:
-                if datetime.fromisoformat(room["deadline"]) - datetime.utcnow() <= timedelta(hours=1):
+                deadline = datetime.fromisoformat(room["deadline"])
+                if timedelta(0) < (deadline - now) <= timedelta(hours=1):
                     for uid in room["members"]:
-                        await app.bot.send_message(int(uid), f"⏰ Остался 1 час до дедлайна комнаты `{code}`!")
-            except: pass
+                        try:
+                            await app.bot.send_message(
+                                int(uid),
+                                f"*Напоминание!*\nДо дедлайна комнаты `{code}` остался ~1 час!\nВведи пожелание, если ещё не сделал!",
+                                parse_mode="Markdown"
+                            )
+                        except:
+                            pass
+            except:
+                pass
+
 
 # ====================== ЗАПУСК ======================
-def main():
+async def run_bot():
     app = Application.builder().token(TOKEN).build()
 
+    # Добавляем все хендлеры
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("create_room", create_room))
     app.add_handler(CommandHandler("join_room", join_room))
     app.add_handler(CommandHandler("start_game", start_game))
-    app.add_handler(CallbackQueryHandler(button))
+    app.add_handler(CallbackQueryHandler(inline_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-    app.create_task(reminders(app))
+    # Запускаем напоминания уже ПОСЛЕ старта бота
+    app.job_queue.run_repeating(
+        lambda context: None, interval=1, first=10
+    )  # просто чтобы job_queue инициализировался
+    app.create_task(reminder_loop(app))
 
-    print("🎄 Бот запущен и готов к Новому Году!")
-    app.run_polling(drop_pending_updates=True)
+    print("Бот запущен! Снегопад, квесты, игры — всё работает!")
+    await app.run_polling(drop_pending_updates=True)
+
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    main()
+    # Запускаем Flask в отдельном потоке
+    Thread(target=run_flask, daemon=True).start()
+    print("Flask keep-alive запущен на фоне")
+
+    # Запускаем бота
+    asyncio.run(run_bot())   # ← ЭТО ГЛАВНОЕ ИСПРАВЛЕНИЕ
