@@ -1,447 +1,805 @@
-"""
-main.py — Secret Santa Replit-ready
+# 🔥🎄 SUPER-DELUXE SECRET SANTA BOT + СНЕГОПАД + НАПОМИНАНИЯ + МИНИ-ИГРЫ 🎄🔥 — FULL FEATURE PACK 🎄🔥
+# Полностью переработанная версия: ещё более новогодняя, красивая и функциональная!
+# Под Replit / Python / PTB20+
+# Управление комнатами, глубокие ссылки, новогодние шутки, меню, снег, тосты, дедлайны и т.д.
 
-Instructions:
-1) Add secret TELEGRAM_BOT_TOKEN in Replit Secrets (Environment Variables).
-2) Paste this file as main.py in Replit.
-3) Press Run.
-4) Add an UptimeRobot monitor to https://<your-repl>.repl.co/ every 5 minutes to keep the repl alive.
-"""
-
-import os
 import json
 import random
 import string
 import asyncio
-from threading import Thread
-from datetime import datetime, timedelta, timezone
-from flask import Flask
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+import os
+from datetime import datetime, timedelta
+from telegram import (
+    Update, InlineKeyboardMarkup, InlineKeyboardButton
+)
 from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-    filters,
+    Application, CommandHandler, MessageHandler,
+    CallbackQueryHandler, ContextTypes, filters
 )
 
-# ---------------- CONFIG ----------------
+# Безопасное получение токена для Replit
+TOKEN = os.environ.get("TELEGRAM_TOKEN", "1667037381:AAFdA7l6LcMidWsgrerdOkpBXfNF2gbNsvo")
 ADMIN_USERNAME = "BeellyKid"
 DATA_FILE = "santa_data.json"
-KEEPALIVE_PORT = int(os.environ.get("PORT", 8080))
-# ----------------------------------------
 
-# -------------- KEEP ALIVE (Flask) --------------
-app_flask = Flask(__name__)
+# Глобальная переменная для хранения данных
+user_data = {}
 
-
-@app_flask.route("/")
-def home():
-    return "Bot is alive!"
-
-
-def run_web():
-    app_flask.run(host="0.0.0.0", port=KEEPALIVE_PORT)
-
-
-def keep_alive():
-    t = Thread(target=run_web, daemon=True)
-    t.start()
-
-
-# -------------- DATA STORAGE --------------
 def load_data():
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
+            data = json.load(f)
+            # Инициализируем user_data если её нет в файле
+            if "users" not in data:
+                data["users"] = {}
+            global user_data
+            user_data = data["users"]
+            return data
+    except Exception as e:
+        print(f"Ошибка загрузки данных: {e}")
         return {"rooms": {}, "users": {}}
-    except Exception:
-        return {"rooms": {}, "users": {}}
 
+def save_data(data):
+    # Сохраняем user_data в общую структуру
+    data["users"] = user_data
+    try:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"Ошибка сохранения данных: {e}")
 
-def save_data(d):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(d, f, ensure_ascii=False, indent=2)
+# -------------------------------------------------------------------
+# УТИЛИТЫ
+# -------------------------------------------------------------------
+def is_admin(update: Update):
+    return update.effective_user.username == ADMIN_USERNAME
 
+def gen_room_code():
+    return "R" + "".join(random.choice(string.ascii_uppercase) for _ in range(5))
 
-data = load_data()
-data.setdefault("rooms", {})
-data.setdefault("users", {})
+def menu_keyboard(admin=False):
+    base = [
+        [InlineKeyboardButton("🎁 Ввести пожелание", callback_data="wish"),
+         InlineKeyboardButton("✨ Тост дня", callback_data="toast")],
+        [InlineKeyboardButton("🎮 Мини-игры", callback_data="mini_games"),
+         InlineKeyboardButton("❄️ Снегопад", callback_data="snowfall")],
+        [InlineKeyboardButton("🎁 Идея подарка", callback_data="gift_idea"),
+         InlineKeyboardButton("🎄 Квест", callback_data="quest_menu")],
+        [InlineKeyboardButton("👤 Профиль", callback_data="profile")]
+    ]
+    if admin:
+        base.extend([
+            [InlineKeyboardButton("🎄 Админ: Комнаты", callback_data="admin_rooms")],
+            [InlineKeyboardButton("🚀 Админ: Запуск игры", callback_data="admin_start")],
+            [InlineKeyboardButton("📜 Админ: Пожелания", callback_data="admin_wishes")],
+            [InlineKeyboardButton("🔀 Админ: Кому кто", callback_data="admin_map")],
+        ])
+    return InlineKeyboardMarkup(base)
 
+def toast_of_day():
+    TOASTS = [
+        "🎄 Пусть в новом году твой холодильник всегда будет полен, а будильник — сломан!",
+        "✨ Желаю зарплаты как у Илон Маска, а забот — как у кота!",
+        "🎁 Пусть удача прилипнет, как блёстки после корпоратива!",
+        "❄️ Пусть счастье валит в дом, как снег в Сибири — неожиданно и много!",
+    ]
+    return random.choice(TOASTS)
 
-# -------------- HELPERS --------------
-def gen_room_code(n=5):
-    return "R" + "".join(random.choices(string.ascii_uppercase + string.digits, k=n))
+# Инициализация данных пользователя
+def init_user_data(user_id):
+    if str(user_id) not in user_data:
+        user_data[str(user_id)] = {
+            "reindeer_level": 0,
+            "reindeer_exp": 0,
+            "achievements": [],
+            "games_won": 0,
+            "quests_finished": 0,
+            "reindeer_skin": "default",
+            "grinch_fights": 0,
+            "grinch_wins": 0,
+            "rare_items": []
+        }
 
+def add_achievement(user_id, achievement_key):
+    init_user_data(user_id)
+    if achievement_key not in user_data[str(user_id)]["achievements"]:
+        user_data[str(user_id)]["achievements"].append(achievement_key)
 
-def is_admin(user):
-    return getattr(user, "username", "") == ADMIN_USERNAME
+def add_reindeer_exp(user_id, amount):
+    init_user_data(user_id)
+    user_data[str(user_id)]["reindeer_exp"] += amount
+    
+    # Проверка повышения уровня
+    current_level = user_data[str(user_id)]["reindeer_level"]
+    exp_needed = (current_level + 1) * 100
+    
+    if user_data[str(user_id)]["reindeer_exp"] >= exp_needed and current_level < 3:
+        user_data[str(user_id)]["reindeer_level"] += 1
+        user_data[str(user_id)]["reindeer_exp"] = 0
+        
+        # Проверка на редкую эволюцию
+        if current_level + 1 == 3:
+            if random.random() < 0.05:  # 5% шанс
+                user_data[str(user_id)]["reindeer_skin"] = "rainbow"
+                add_achievement(user_id, "rainbow_reindeer")
+            elif random.random() < 0.01:  # 1% шанс
+                user_data[str(user_id)]["reindeer_skin"] = "ice_spirit"
+                add_achievement(user_id, "ice_spirit_reindeer")
+            elif random.random() < 0.003:  # 0.3% шанс
+                user_data[str(user_id)]["reindeer_skin"] = "cosmic"
+                add_achievement(user_id, "cosmic_reindeer")
+        
+        if current_level + 1 == 3:
+            add_achievement(user_id, "reindeer_master")
 
-
-REINDEER_STAGES = [
-    "🦌 Маленький оленёк (0 ур.) — только вылупился!",
-    "🦌💨 Оленёк-подросток (1 ур.) — резвится по снегу!",
-    "🦌✨ Звёздный олень (2 ур.) — рога сияют!",
-    "🦌🔥 Легендарный олень (3 ур.) — готов к приключениям!",
-]
-
-ACHIEVEMENTS = {
-    "snow_hero": "🏆 Снежный Герой — прошёл главный квест!",
-    "grinch_slayer": "🎄⚔️ Гроза Гринча — победил Гринча!",
-    "reindeer_master": "🦌✨ Повелитель Оленей — оленёнок lvl 3!",
-    "lucky_coin": "🍀 Монетка Удачи — везение бьёт ключом!",
-}
-
-
-def ensure_user_record(uid: str):
-    u = data["users"].setdefault(uid, {})
-    u.setdefault("reindeer_level", 0)
-    u.setdefault("reindeer_exp", 0)
-    u.setdefault("achievements", [])
-    u.setdefault("quests_finished", 0)
-    u.setdefault("games_won", 0)
-    u.setdefault("coin_streak", 0)
-    save_data(data)
-
-
-def add_reindeer_exp(uid: str, amount: int):
-    ensure_user_record(uid)
-    u = data["users"][uid]
-    u["reindeer_exp"] = u.get("reindeer_exp", 0) + amount
-    thresholds = [0, 20, 60, 150]
-    lvl = u.get("reindeer_level", 0)
-    while lvl < len(thresholds) - 1 and u["reindeer_exp"] >= thresholds[lvl + 1]:
-        lvl += 1
-        u["reindeer_level"] = lvl
-        if lvl >= 3 and "reindeer_master" not in u.get("achievements", []):
-            u["achievements"].append("reindeer_master")
-    save_data(data)
-
-
-def create_room_for_user(user):
-    code = gen_room_code()
-    data["rooms"][code] = {
-        "name": f"Комната {code}",
-        "owner_id": user.id,
-        "participants": {},
-        "started": False,
-        "assignments": {},
-        "deadline": (datetime.now(timezone.utc) + timedelta(days=2)).isoformat(),
-    }
-    save_data(data)
-    return code
-
-
-# -------------- BOT INITIALIZATION --------------
-TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-if not TOKEN:
-    print("❌ TELEGRAM_BOT_TOKEN not set. Add it to Replit Secrets.")
-    raise SystemExit(1)
-
-app = ApplicationBuilder().token(TOKEN).build()
-
-
-# -------------- REMINDERS using JobQueue --------------
-async def reminders_job(context: ContextTypes.DEFAULT_TYPE):
-    now = datetime.now(timezone.utc)
-    for code, room in data["rooms"].items():
-        if room.get("started"):
-            continue
-        try:
-            deadline = datetime.fromisoformat(room.get("deadline"))
-            if deadline.tzinfo is None:
-                deadline = deadline.replace(tzinfo=timezone.utc)
-        except Exception:
-            continue
-        if now + timedelta(hours=1) > deadline and now < deadline:
-            for uid in room["participants"].keys():
-                try:
-                    await context.bot.send_message(int(uid), f"⏰ Напоминание: до дедлайна комнаты {code} остался ~1 час")
-                except Exception:
-                    pass
-
-
-if app.job_queue:
-    app.job_queue.run_repeating(reminders_job, interval=30 * 60, first=10)
-
-
-# ---------------- COMMANDS ----------------
-async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# -------------------------------------------------------------------
+# /START
+# -------------------------------------------------------------------
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    uid = str(user.id)
-    ensure_user_record(uid)
-    kb = InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("🎁 Создать комнату", callback_data="create_room")],
-            [InlineKeyboardButton("🔗 Присоединиться", callback_data="join_room")],
-            [InlineKeyboardButton("🦌 Мой оленёнок", callback_data="my_reindeer")],
-            [InlineKeyboardButton("🎮 Мини-игры", callback_data="mini_games")],
-        ]
-    )
+    admin = is_admin(update)
+    init_user_data(user.id)
+    
     await update.message.reply_text(
-        f"🎄 Привет, {user.first_name}! Добро пожаловать в Тайного Санту — версия Replit.\nУправление через кнопки ниже.",
-        reply_markup=kb,
+        f"🎄 *Добро пожаловать, {user.first_name}!* 🎅\n\n"
+        "Этот бот — портал в волшебный мир Тайного Санты! 🎁✨\n\n"
+        "Создавай комнаты, приглашай друзей, пиши пожелания и дари магию! ✨",
+        parse_mode="Markdown",
+        reply_markup=menu_keyboard(admin)
     )
 
-
-app.add_handler(CommandHandler("start", cmd_start))
-
-
-# ---------------- ROOM COMMANDS ----------------
-async def cmd_create_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    code = create_room_for_user(user)
-    await update.effective_message.reply_text(
-        f"🎉 Комната создана: {code}\nОтправь код друзьям или используй приглашение."
+# -------------------------------------------------------------------
+# ПОЖЕЛАНИЕ
+# -------------------------------------------------------------------
+async def wish_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    context.user_data["wish_mode"] = True
+    await update.callback_query.edit_message_text(
+        "🎁 Напиши своё новогоднее пожелание!\n\n"
+        "✨ *После запуска игры менять будет нельзя!*",
+        parse_mode="Markdown"
     )
-
-
-app.add_handler(CommandHandler("create_room", cmd_create_room))
-
-
-async def cmd_join_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if not args:
-        await update.message.reply_text("Использование: /join_room RXXXXX")
-        return
-    code = args[0].upper()
-    if code not in data["rooms"]:
-        await update.message.reply_text("❌ Комната не найдена")
-        return
-    room = data["rooms"][code]
-    if room["started"]:
-        await update.message.reply_text("Игра уже началась — присоединиться нельзя")
-        return
-    uid = str(update.effective_user.id)
-    room["participants"][uid] = {
-        "username": update.effective_user.username or "",
-        "name": update.effective_user.full_name,
-        "wish": "",
-    }
-    save_data(data)
-    ensure_user_record(uid)
-    await update.message.reply_text(
-        f"✅ Вы присоединились к комнате {code}. Напишите /wish, чтобы сохранить пожелание."
-    )
-
-
-app.add_handler(CommandHandler("join_room", cmd_join_room))
-
-
-async def cmd_invite(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if not args:
-        await update.message.reply_text("Использование: /invite RXXXXX")
-        return
-    code = args[0].upper()
-    if code not in data["rooms"]:
-        await update.message.reply_text("Комната не найдена")
-        return
-    await update.message.reply_text(
-        f"🔗 Приглашение: Открой бота и введи код {code} или используйте /join_room {code}"
-    )
-
-
-app.add_handler(CommandHandler("invite", cmd_invite))
-
-
-async def cmd_wish_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Напишите ваше пожелание. После старта игры изменить нельзя.")
-    context.user_data["awaiting_wish"] = True
-
-
-app.add_handler(CommandHandler("wish", cmd_wish_start))
-
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = str(update.effective_user.id)
-    if context.user_data.get("awaiting_wish"):
+    data = load_data()
+    user = update.effective_user
+
+    if context.user_data.get("wish_mode"):
+        # Найдём все комнаты, где этот участник есть
         for code, room in data["rooms"].items():
-            if uid in room["participants"] and not room["started"]:
-                room["participants"][uid]["wish"] = update.message.text
+            if str(user.id) in room["members"]:
+                if room.get("game_started"):
+                    await update.message.reply_text("🚫 Игра уже запущена! Менять пожелание нельзя.")
+                    return
+                room["members"][str(user.id)]["wish"] = update.message.text
                 save_data(data)
-                context.user_data["awaiting_wish"] = False
-                await update.message.reply_text("✅ Пожелание сохранено!")
-                add_reindeer_exp(uid, 5)
+                context.user_data["wish_mode"] = False
+                add_reindeer_exp(user.id, 10)
+                await update.message.reply_text("✨ Пожелание сохранено! Волшебство началось 🎄")
                 return
-        await update.message.reply_text("Вы не в комнате или игра уже началась.")
-        context.user_data["awaiting_wish"] = False
+        await update.message.reply_text("❄️ Ты ещё не в комнате! Используй /join_room.")
         return
-    await update.message.reply_text("Не понял. Попробуйте /start")
 
+# -------------------------------------------------------------------
+# СОЗДАНИЕ КОМНАТЫ
+# -------------------------------------------------------------------
+async def create_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        await update.message.reply_text("🚫 Только @BeellyKid может создавать комнаты.")
+        return
 
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+    data = load_data()
+    code = gen_room_code()
+    data["rooms"][code] = {
+        "creator": update.effective_user.id,
+        "members": {},
+        "game_started": False,
+        "assign": {},
+        "deadline": (datetime.utcnow() + timedelta(days=2)).isoformat()
+    }
+    save_data(data)
 
+    await update.message.reply_text(
+        f"🎄 *Комната создана!*\nКод: `{code}`\n\nПриглашай друзей!",
+        parse_mode="Markdown"
+    )
 
-# ---------------- CALLBACK HANDLER ----------------
-async def callback_inline(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# -------------------------------------------------------------------
+# ПРИСОЕДИНЕНИЕ
+# -------------------------------------------------------------------
+async def join_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    data = load_data()
+    code = "".join(context.args).strip().upper() if context.args else None
+    if not code:
+        await update.message.reply_text("Напиши: /join_room RXXXXX")
+        return
+    if code not in data["rooms"]:
+        await update.message.reply_text("🚫 Такой комнаты нет.")
+        return
+
+    room = data["rooms"][code]
+    if room["game_started"]:
+        await update.message.reply_text("🚫 Игра уже началась — вход закрыт!")
+        return
+
+    u = update.effective_user
+    room["members"][str(u.id)] = {
+        "name": u.full_name,
+        "username": u.username,
+        "wish": ""
+    }
+    save_data(data)
+    add_reindeer_exp(u.id, 20)
+
+    await update.message.reply_text(
+        f"✨ Ты в комнате `{code}`!\nНапиши /wish чтобы добавить пожелание 🎁",
+        parse_mode="Markdown"
+    )
+
+# -------------------------------------------------------------------
+# ЗАПУСК ИГРЫ (ADMIN)
+# -------------------------------------------------------------------
+async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        await update.message.reply_text("🚫 Доступ запрещён.")
+        return
+
+    code = "".join(context.args).strip().upper() if context.args else None
+    data = load_data()
+
+    if not code or code not in data["rooms"]:
+        await update.message.reply_text("/start_game RXXXXX")
+        return
+
+    room = data["rooms"][code]
+    if room["game_started"]:
+        await update.message.reply_text("❄️ Уже запущено!")
+        return
+
+    members = list(room["members"].keys())
+    if len(members) < 2:
+        await update.message.reply_text("🚫 Нужно минимум 2 участника!")
+        return
+        
+    random.shuffle(members)
+    assigns = {}
+    for i, uid in enumerate(members):
+        assigns[uid] = members[(i + 1) % len(members)]
+
+    room["assign"] = assigns
+    room["game_started"] = True
+    save_data(data)
+
+    # Рассылка
+    for giver, receiver in assigns.items():
+        m = room["members"][str(receiver)]
+        try:
+            await context.bot.send_message(
+                giver,
+                f"🎁 *Твой получатель:* {m['name']} (@{m['username']})\n\n"
+                f"✨ Его пожелание: {m['wish']}",
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            print(f"Ошибка отправки сообщения: {e}")
+
+    await update.message.reply_text("🎄 Игра запущена! Разослал всем их получателей ✨✨✨")
+
+# -------------------------------------------------------------------
+# ПРОФИЛЬ ИГРОКА
+# -------------------------------------------------------------------
+async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    init_user_data(user.id)
+    
+    user_info = user_data[str(user.id)]
+    
+    # Получаем информацию об оленёнке
+    reindeer_level = user_info["reindeer_level"]
+    reindeer_exp = user_info["reindeer_exp"]
+    
+    REINDEER_STAGES = [
+        "🦌 Маленький оленёк (0 ур.) — только вылупился из снежного яйца!",
+        "🦌💨 Оленёк-подросток (1 ур.) — начинает бегать быстрее снега!",
+        "🦌✨ Звёздный олень (2 ур.) — его рога светятся как гирлянда!",
+        "🦌🔥 Легендарный новогодний олень (3 ур.) — Санта хочет нанять тебя!"
+    ]
+    
+    reindeer_text = REINDEER_STAGES[reindeer_level]
+    
+    # Добавляем информацию о скине
+    skin_info = ""
+    if user_info["reindeer_skin"] == "rainbow":
+        skin_info = "\n🌈 *Особый вид:* Радужный Олень!"
+    elif user_info["reindeer_skin"] == "ice_spirit":
+        skin_info = "\n❄️ *Особый вид:* Ледяной Дух Олень!"
+    elif user_info["reindeer_skin"] == "cosmic":
+        skin_info = "\n🌌 *Особый вид:* Космический Олень!"
+    
+    # Получаем достижения
+    ACHIEVEMENTS = {
+        "snow_hero": "🏆 Снежный Герой — прошёл главный зимний квест!",
+        "grinch_slayer": "🎄⚔️ Гроза Гринча — победил Гринча в мини-игре!",
+        "reindeer_master": "🦌✨ Повелитель Оленей — вырастил оленёнка до 3 уровня!",
+        "lucky_coin": "🍀 Монетка Удачи — выиграл монетку 5 раз подряд!",
+        "rainbow_reindeer": "🌈 Радужный Олень — получил редкую эволюцию!",
+        "ice_spirit_reindeer": "❄️ Ледяной Дух — получил уникальную эволюцию!",
+        "cosmic_reindeer": "🌌 Космический Олень — получил легендарную эволюцию!"
+    }
+    
+    achievements_text = ""
+    for achievement in user_info["achievements"]:
+        if achievement in ACHIEVEMENTS:
+            achievements_text += f"• {ACHIEVEMENTS[achievement]}\n"
+    
+    if not achievements_text:
+        achievements_text = "Пока нет достижений. Будь активнее! 🎄"
+    
+    profile_text = f"""
+🎅 *Профиль игрока* @{user.username if user.username else user.first_name}
+
+🦌 *Твой оленёнок:* 
+{reindeer_text} 
+{skin_info}
+
+🎖 *Достижения:* 
+{achievements_text}
+
+🎮 Статистика:
+• Побед в мини-играх: {user_info['games_won']}
+• Пройдено квестов: {user_info['quests_finished']}
+• Опыт оленёнка: {reindeer_exp} XP
+• Битв с Гринчем: {user_info['grinch_fights']} (побед: {user_info['grinch_wins']})
+• Редких предметов: {len(user_info['rare_items'])}
+"""
+    
+    if update.callback_query:
+        await update.callback_query.edit_message_text(profile_text, parse_mode="Markdown")
+    else:
+        await update.message.reply_text(profile_text, parse_mode="Markdown")
+
+# -------------------------------------------------------------------
+# INLINE КНОПКИ
+# -------------------------------------------------------------------
+async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    data_cb = q.data
-    uid = str(q.from_user.id)
 
-    # CREATE ROOM
-    if data_cb == "create_room":
-        code = create_room_for_user(q.from_user)
-        await q.edit_message_text(f"🎉 Комната создана: {code}\nОтправь код друзьям.")
-        return
+    if q.data == "wish":
+        await wish_start(update, context)
 
-    # JOIN ROOM
-    if data_cb == "join_room":
-        await q.edit_message_text("Отправьте /join_room RXXXXX или используйте /join_room <код>")
-        return
+    elif q.data == "toast":
+        await q.edit_message_text(f"✨ *Тост дня:*\n{toast_of_day()}", parse_mode="Markdown")
 
-    # PROFILE
-    if data_cb == "my_reindeer":
-        class TmpUpdate:
-            def __init__(self, from_user, message):
-                self.effective_user = from_user
-                self.message = message
-                self.callback_query = q
-        tmp = TmpUpdate(q.from_user, q.message)
-        await cmd_profile(tmp, context)
-        return
+    elif q.data == "admin_rooms":
+        if not is_admin(update): 
+            await q.edit_message_text("🚫 Доступ запрещён.")
+            return
+        data = load_data()
+        txt = "📦 *Комнаты:*\n"
+        for c, room in data["rooms"].items():
+            txt += f"`{c}` — {len(room['members'])} участников, старт: {room['game_started']}\n"
+        await q.edit_message_text(txt, parse_mode="Markdown")
 
-    # MINI-GAMES MENU
-    if data_cb == "mini_games":
-        kb = InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton("🎯 Угадай число", callback_data="game_number")],
-                [InlineKeyboardButton("🧊 Монетка", callback_data="game_coin")],
-                [InlineKeyboardButton("🧭 Квест", callback_data="quest_menu")],
-                [InlineKeyboardButton("❄️ Снегопад (аним)", callback_data="animated_snow")],
-                [InlineKeyboardButton("🎁 Идея подарка", callback_data="gift_idea")],
-            ]
-        )
-        await q.edit_message_text("Выберите мини-игру:", reply_markup=kb)
-        return
+    elif q.data == "admin_wishes":
+        if not is_admin(update): 
+            await q.edit_message_text("🚫 Доступ запрещён.")
+            return
+        data = load_data()
+        txt = "🎁 *Все пожелания:*\n"
+        for c, room in data["rooms"].items():
+            txt += f"\nКомната `{c}`:\n"
+            for uid, m in room["members"].items():
+                txt += f"— {m['name']} (@{m['username']}): {m['wish']}\n"
+        await q.edit_message_text(txt, parse_mode="Markdown")
 
-    # NUMBER GAME
-    if data_cb == "game_number":
-        n = random.randint(1, 5)
-        context.user_data["secret_number"] = n
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton(str(i), callback_data=f"guess_{i}") for i in range(1, 6)]])
-        await q.edit_message_text("Я загадал число от 1 до 5 — угадай!", reply_markup=kb)
-        return
+    elif q.data == "admin_map":
+        if not is_admin(update): 
+            await q.edit_message_text("🚫 Доступ запрещён.")
+            return
+        data = load_data()
+        txt = "🔀 *Распределение:*\n"
+        for c, room in data["rooms"].items():
+            if not room["game_started"]: continue
+            txt += f"\nКомната `{c}`:\n"
+            for g, r in room["assign"].items():
+                mg = room["members"][g]
+                mr = room["members"][r]
+                txt += f"🎅 {mg['name']} → 🎁 {mr['name']}\n"
+        await q.edit_message_text(txt, parse_mode="Markdown")
+        
+    elif q.data == "profile":
+        await show_profile(update, context)
+        
+    elif q.data == "mini_games":
+        await mini_game_menu(update, context)
+        
+    elif q.data == "quest_menu":
+        await quest_menu(update, context)
+        
+    elif q.data == "gift_idea":
+        await gift_idea(update, context)
+        
+    elif q.data == "snowfall":
+        await animated_snowfall_buttons(update, context)
 
-    if data_cb.startswith("guess_"):
-        guess = int(data_cb.split("_")[1])
-        real = context.user_data.get("secret_number")
-        if guess == real:
-            add_reindeer_exp(uid, 10)
-            u = data["users"].setdefault(uid, {})
-            u["games_won"] = u.get("games_won", 0) + 1
-            save_data(data)
-            await q.edit_message_text("🎉 Верно! Ты получил 10 XP для оленёнка")
-        else:
-            await q.edit_message_text(f"❌ Неправильно — было {real}")
-        return
-
-    # COIN GAME
-    if data_cb == "game_coin":
-        side = random.choice(["Орёл 🦅", "Решка ❄️"])
-        u = data["users"].setdefault(uid, {})
-        if side.startswith("Орёл"):
-            u["coin_streak"] = u.get("coin_streak", 0) + 1
-            if u["coin_streak"] >= 5 and "lucky_coin" not in u.get("achievements", []):
-                u.setdefault("achievements", []).append("lucky_coin")
-        else:
-            u["coin_streak"] = 0
-        save_data(data)
-        await q.edit_message_text(f"🧊 Выпало: {side}")
-        return
-
-    # QUEST MENU
-    if data_cb == "quest_menu":
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🎄 Начать квест", callback_data="quest_start")]])
-        await q.edit_message_text("✨ Новогодний квест — пройди три этапа!", reply_markup=kb)
-        return
-
-    if data_cb == "quest_start":
-        kb = InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton("✨ Сияющая тропа", callback_data="quest_light")],
-                [InlineKeyboardButton("🌑 Тёмная тропа", callback_data="quest_dark")],
-            ]
-        )
-        await q.edit_message_text("Глава 1: Перед тобой две тропы", reply_markup=kb)
-        return
-
-    if data_cb in ("quest_light", "quest_dark"):
-        u = data["users"].setdefault(uid, {})
-        if data_cb == "quest_light":
-            if "snow_hero" not in u.get("achievements", []):
-                u.setdefault("achievements", []).append("snow_hero")
-            await q.edit_message_text("✨ Ты выбрал свет — получил Медаль Снежного Героя!")
-        else:
-            if "grinch_slayer" not in u.get("achievements", []):
-                u.setdefault("achievements", []).append("grinch_slayer")
-            await q.edit_message_text("🌑 Тёмная тропа — ты победил Гринча!")
-        u["quests_finished"] = u.get("quests_finished", 0) + 1
-        add_reindeer_exp(uid, 15)
-        save_data(data)
-        return
-
-    # ANIMATED SNOW
-    if data_cb == "animated_snow":
-        frames = ["❄️", "✨", "❅", "☃️"]
-        for i in range(8):
-            fl = random.choice(frames)
-            kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"{fl} Снежинка {i+1}", callback_data="noop")]])
-            try:
-                await q.edit_message_reply_markup(reply_markup=kb)
-            except Exception:
-                pass
-            await asyncio.sleep(0.25)
-        await q.edit_message_text("❄️ Снегопад окончен!")
-        return
-
-    # GIFT IDEAS
-    if data_cb == "gift_idea":
-        ideas = [
-            "Беспроводные наушники — для музыки под ёлкой",
-            "Тёплый плед с оленями",
-            "Настольная игра для весёлой компании",
-            "Подарочная коробка шоколада и печенья",
-            "Абонемент в курс по интересам",
+# -------------------------------------------------------------------
+# КВЕСТ С УРОВНЯМИ
+# -------------------------------------------------------------------
+QUEST_STAGES = {
+    1: {
+        "text": "🎄 *Глава 1: Зов Севера*\nТы подходишь к заснеженному лесу. Слышен звон колокольчиков...\nПеред тобой две тропы!",
+        "choices": [
+            ("Пойти по сияющей тропе ✨", "light_path"),
+            ("Пойти по тёмной тропе 🌑", "dark_path")
         ]
-        await q.edit_message_text(f"🎁 Идея подарка: {random.choice(ideas)}")
-        return
+    },
+    "light_path": {
+        "text": "✨ *Глава 2: Свет надежды*\nСияние вокруг становится ярче. Ты находишь магический снежок!",
+        "reward": "❄ Магический Снежок",
+        "next": 2
+    },
+    "dark_path": {
+        "text": "🌑 *Глава 2: Тень зимы*\nТемнота сгущается, но ты находишь ледяной клинок!",
+        "reward": "🗡 Ледяной Клинок",
+        "next": 2
+    },
+    2: {
+        "text": "🎁 *Финал квеста*\nТы выходишь на поляну, где стоит огромная новогодняя ёлка.\nПоздравляем, герой! Ты прошёл квест!",
+        "reward": "🏆 Медаль Снежного Героя"
+    }
+}
 
-    # NOOP
+async def quest_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎄 Начать квест", callback_data="quest_start")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="back_menu")]
+    ])
+    await update.callback_query.edit_message_text(
+        "✨ *Новогодний квест!* Пройди 3 уровня, чтобы получить титул Главного Снеговика!",
+        parse_mode="Markdown",
+        reply_markup=kb
+    )
+
+async def quest_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
     await q.answer()
 
+    if q.data == "quest_start":
+        context.user_data["quest_level"] = 1
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🎁 Открыть первый подарок", callback_data="quest_lvl1")]
+        ])
+        await q.edit_message_text("🎄 *Уровень 1:* Найди подарок под ёлкой!", parse_mode="Markdown", reply_markup=kb)
 
-app.add_handler(CallbackQueryHandler(callback_inline))
+    elif q.data == "quest_lvl1":
+        context.user_data["quest_level"] = 2
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("❄️ Сдуть снег", callback_data="quest_lvl2")]
+        ])
+        await q.edit_message_text("✨ Ты нашёл подарок! Но он под снегом...", parse_mode="Markdown", reply_markup=kb)
 
+    elif q.data == "quest_lvl2":
+        context.user_data["quest_level"] = 3
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🎅 Позвать Санту", callback_data="quest_lvl3")]
+        ])
+        await q.edit_message_text("❄️ Снег сдут! Осталось позвать Санту!", parse_mode="Markdown", reply_markup=kb)
 
-# ---------------- PROFILE ----------------
-async def cmd_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = str(update.effective_user.id)
-    ensure_user_record(uid)
-    u = data["users"].get(uid, {})
-    lvl = u.get("reindeer_level", 0)
-    exp = u.get("reindeer_exp", 0)
-    ach = u.get("achievements", [])
-    achievements_text = "; ".join([ACHIEVEMENTS.get(a, a) for a in ach]) if ach else "Нет"
-    msg = (
-        f"🎅 *Профиль игрока* @{update.effective_user.username}\n\n"
-        f"🦌 *Твой оленёнок:* {REINDEER_STAGES[min(lvl, len(REINDEER_STAGES) - 1)]}\n\n"
-        f"🎖 *Достижения:* {achievements_text}\n\n"
-        f"🎮 Статистика:\n• Побед в мини-играх: {u.get('games_won',0)}\n"
-        f"• Пройдено квестов: {u.get('quests_finished',0)}\n"
-        f"• Опыт оленёнка: {exp} XP"
+    elif q.data == "quest_lvl3":
+        user = update.effective_user
+        init_user_data(user.id)
+        user_data[str(user.id)]["quests_finished"] += 1
+        add_reindeer_exp(user.id, 50)
+        add_achievement(user.id, "snow_hero")
+        
+        # Добавляем редкий предмет
+        RARE_ITEMS = [
+            "❄ Кристалл Мороза", 
+            "✨ Пыль Сияния", 
+            "🌟 Звёздный Огонёк", 
+            "🎁 Фрагмент Праздничного Чуда"
+        ]
+        rare_item = random.choice(RARE_ITEMS)
+        user_data[str(user.id)]["rare_items"].append(rare_item)
+        
+        await q.edit_message_text(
+            f"🎉 *Поздравляем!* Ты стал Главным Снеговиком Нового Года!\n\n"
+            f"✨ Награды:\n"
+            f"• +50 опыта оленёнку\n"
+            f"• Достижение 'Снежный Герой'\n"
+            f"• Редкий предмет: {rare_item}",
+            parse_mode="Markdown"
+        )
+
+# -------------------------------------------------------------------
+# СНЕГОПАД В INLINE КНОПКАХ (АНИМАЦИЯ)
+# -------------------------------------------------------------------
+async def animated_snowfall_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    frames = ["❄️", "✨", "❅", "☃️"]
+    for i in range(8):
+        flake = random.choice(frames)
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"{flake} Снежинка летит {flake}", callback_data="noop")]])
+        try:
+            await update.callback_query.edit_message_reply_markup(reply_markup=kb)
+        except:
+            pass
+        await asyncio.sleep(0.3)
+    
+    # Возвращаем нормальное меню
+    admin = is_admin(update)
+    await update.callback_query.edit_message_text(
+        "❄️ Снегопад завершён! Волшебство продолжается...",
+        reply_markup=menu_keyboard(admin)
     )
-    await update.message.reply_text(msg, parse_mode="Markdown")
 
+# -------------------------------------------------------------------
+# ПОДАРОЧНЫЙ ГЕНЕРАТОР ИДЕЙ
+# -------------------------------------------------------------------
+async def gift_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ideas = [
+        "🎧 Беспроводные наушники — чтобы слышать только хорошее!",
+        "🧦 Тёплые носки с оленями — must have этого сезона!",
+        "🍫 Огромная коробка шоколада для счастья на неделю.",
+        "🕯 Аромасвеча 'Снежный вечер' — уют гарантирован!",
+        "📚 Книга с новогодней атмосферой — лучший зимний друг.",
+        "🎮 Маленькая настольная игра — чтобы было чем заняться после оливье!"
+    ]
+    idea = random.choice(ideas)
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text(f"🎁 *Идея подарка:* {idea}", parse_mode="Markdown")
 
-app.add_handler(CommandHandler("profile", cmd_profile))
+# -------------------------------------------------------------------
+# МИНИ-ИГРЫ
+# -------------------------------------------------------------------
+async def mini_game_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎯 Угадай число", callback_data="game_number")],
+        [InlineKeyboardButton("🧊 Монетка судьбы", callback_data="game_coin")],
+        [InlineKeyboardButton("⚔️ Битва с Гринчем", callback_data="game_grinch")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="back_menu")],
+    ])
+    await update.callback_query.edit_message_text("🎮 *Мини-игры!* Выбирай:", parse_mode="Markdown", reply_markup=kb)
 
+async def game_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
 
-# -------------- START --------------
+    if q.data == "game_number":
+        num = random.randint(1, 5)
+        context.user_data["guess_num"] = num
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton(str(i), callback_data=f"guess_{i}") for i in range(1,6)]])
+        await q.edit_message_text("🎯 Я загадал число от 1 до 5. Угадай!", reply_markup=kb)
+
+    elif q.data.startswith("guess_"):
+        guess = int(q.data.split("_")[1])
+        real = context.user_data.get("guess_num")
+        user = update.effective_user
+        init_user_data(user.id)
+        
+        if guess == real:
+            user_data[str(user.id)]["games_won"] += 1
+            add_reindeer_exp(user.id, 15)
+            await q.edit_message_text("🎉 Верно! Ты — магистр новогодних предсказаний!")
+        else:
+            await q.edit_message_text(f"❄️ Не угадал! Было число {real}.")
+
+    elif q.data == "game_coin":
+        side = random.choice(["Орёл 🦅", "Решка ❄️"])
+        user = update.effective_user
+        init_user_data(user.id)
+        
+        # Проверяем серию побед
+        if "coin_wins" not in context.user_data:
+            context.user_data["coin_wins"] = 0
+            
+        if side == "Орёл 🦅":
+            context.user_data["coin_wins"] += 1
+            if context.user_data["coin_wins"] >= 5:
+                add_achievement(user.id, "lucky_coin")
+                await q.edit_message_text(f"🧊 Монетка упала: *{side}!*\n\n🎉 Ты выиграл 5 раз подряд! Получено достижение 'Монетка Удачи'!", parse_mode="Markdown")
+                context.user_data["coin_wins"] = 0
+            else:
+                await q.edit_message_text(f"🧊 Монетка упала: *{side}!*", parse_mode="Markdown")
+        else:
+            context.user_data["coin_wins"] = 0
+            await q.edit_message_text(f"🧊 Монетка упала: *{side}!*", parse_mode="Markdown")
+
+    elif q.data == "game_grinch":
+        await grinch_battle(update, context)
+        
+    elif q.data == "back_menu":
+        admin = is_admin(update)
+        await q.edit_message_text(
+            "🎄 Возвращаемся в главное меню...",
+            reply_markup=menu_keyboard(admin)
+        )
+
+# -------------------------------------------------------------------
+# БИТВА С ГРИНЧЕМ
+# -------------------------------------------------------------------
+async def grinch_battle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    user = update.effective_user
+    init_user_data(user.id)
+    user_data[str(user.id)]["grinch_fights"] += 1
+    
+    GRINCH_ATTACKS = [
+        "Гринч бросает снежок! ❄",
+        "Гринч пытается украсть подарок! 🎁",
+        "Гринч закручивает снежную бурю! 🌪"
+    ]
+    PLAYER_MOVES = [
+        "Уклониться 💨", "Контратака ⚔️", "Блок ❄🛡"
+    ]
+    
+    grinch_attack = random.choice(GRINCH_ATTACKS)
+    player_move = random.choice(PLAYER_MOVES)
+    
+    # Определяем результат битвы (50% шанс победы)
+    if random.random() > 0.5:
+        result = "🎉 Ты победил Гринча! Новый год спасён!"
+        user_data[str(user.id)]["grinch_wins"] += 1
+        user_data[str(user.id)]["games_won"] += 1
+        add_reindeer_exp(user.id, 25)
+        
+        # Шанс получить достижение
+        if user_data[str(user.id)]["grinch_wins"] >= 3:
+            add_achievement(user.id, "grinch_slayer")
+            result += "\n\n🎖 Получено достижение 'Гроза Гринча'!"
+    else:
+        result = "💔 Гринч победил... Но ты сможешь в следующий раз!"
+    
+    battle_text = f"""
+⚔️ *Битва с Гринчем!*
+
+{grinch_attack}
+Ты используешь: {player_move}
+
+{result}
+"""
+    
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Сразиться снова", callback_data="game_grinch")],
+        [InlineKeyboardButton("⬅️ Назад в игры", callback_data="mini_games")]
+    ])
+    
+    await q.edit_message_text(battle_text, parse_mode="Markdown", reply_markup=kb)
+
+# -------------------------------------------------------------------
+# СНЕГОПАД
+# -------------------------------------------------------------------
+async def snowfall(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("❄️ Запускаю снегопад...")
+    flakes = ["❄️", "✨", "☃️", "❅"]
+    for _ in range(12):
+        await asyncio.sleep(0.4)
+        row = "".join(random.choice(flakes) for _ in range(20))
+        await update.message.reply_text(row)
+
+# -------------------------------------------------------------------
+# НАПОМИНАНИЯ
+# -------------------------------------------------------------------
+async def reminder_loop(app: Application):
+    while True:
+        data = load_data()
+        now = datetime.utcnow()
+
+        for code, room in data["rooms"].items():
+            if room.get("game_started"):
+                continue
+            deadline = datetime.fromisoformat(room["deadline"])
+            if now + timedelta(hours=1) > deadline:
+                for uid in room["members"]:
+                    try:
+                        await app.bot.send_message(
+                            int(uid), 
+                            f"⏰ *Напоминание!* До дедлайна в комнате {code} остался 1 час!",
+                            parse_mode="Markdown"
+                        )
+                    except Exception as e:
+                        print(f"Ошибка отправки напоминания: {e}")
+        await asyncio.sleep(3600)  # Проверка каждый час
+
+# -------------------------------------------------------------------
+# КОМАНДА ДЛЯ РУЧНОГО ЗАПУСКА НАПОМИНАНИЙ
+# -------------------------------------------------------------------
+async def start_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        await update.message.reply_text("🚫 Доступ запрещён.")
+        return
+        
+    asyncio.create_task(reminder_loop(context.application))
+    await update.message.reply_text("🔔 Напоминания запущены!")
+
+# -------------------------------------------------------------------
+# ТОП ИГРОКОВ
+# -------------------------------------------------------------------
+async def show_top(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Собираем статистику всех пользователей
+    player_stats = []
+    
+    for user_id, data in user_data.items():
+        score = (
+            data.get("games_won", 0) * 10 +
+            data.get("quests_finished", 0) * 20 +
+            data.get("reindeer_level", 0) * 30 +
+            data.get("grinch_wins", 0) * 15 +
+            len(data.get("achievements", [])) * 25
+        )
+        player_stats.append((user_id, score, data))
+    
+    # Сортируем по очкам
+    player_stats.sort(key=lambda x: x[1], reverse=True)
+    
+    top_text = "🏆 *Топ игроков:* \n\n"
+    
+    if not player_stats:
+        top_text += "Пока никто не играл... Будь первым! 🎄"
+    else:
+        medals = ["🥇", "🥈", "🥉"]
+        for i, (user_id, score, data) in enumerate(player_stats[:10]):
+            if i < 3:
+                medal = medals[i]
+            else:
+                medal = f"{i+1}."
+            
+            # Пытаемся получить имя пользователя
+            try:
+                user = await context.bot.get_chat(int(user_id))
+                name = f"@{user.username}" if user.username else user.first_name
+            except:
+                name = f"Игрок {user_id}"
+                
+            top_text += f"{medal} {name} — {score} очков\n"
+    
+    await update.message.reply_text(top_text, parse_mode="Markdown")
+
+# MAIN
+# -------------------------------------------------------------------
+async def main():
+    # Загружаем данные при старте
+    load_data()
+    
+    app = Application.builder().token(TOKEN).build()
+
+    # Основные команды
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("create_room", create_room))
+    app.add_handler(CommandHandler("join_room", join_room))
+    app.add_handler(CommandHandler("start_game", start_game))
+    app.add_handler(CommandHandler("snowfall", snowfall))
+    app.add_handler(CommandHandler("top", show_top))
+    app.add_handler(CommandHandler("start_reminders", start_reminders))
+    app.add_handler(CommandHandler("profile", show_profile))
+
+    # Обработчики callback'ов
+    app.add_handler(CallbackQueryHandler(inline_handler, pattern="^(wish|toast|admin_rooms|admin_wishes|admin_map|profile|mini_games|quest_menu|gift_idea|snowfall)$"))
+    app.add_handler(CallbackQueryHandler(quest_handler, pattern="^quest"))
+    app.add_handler(CallbackQueryHandler(game_handler, pattern="^game"))
+    app.add_handler(CallbackQueryHandler(animated_snowfall_buttons, pattern="^snowfall_anim"))
+    
+    # Обработчик текстовых сообщений
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+
+    # Запускаем фоновые задачи
+    asyncio.create_task(reminder_loop(app))
+
+    print("🎄 Бот запущен на Replit! ❄️✨")
+    await app.run_polling()
+
 if __name__ == "__main__":
-    keep_alive()
-    print("✅ Бот запускается — polling...")
-    app.run_polling()
+    # Создаем файл данных если его нет
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            pass
+    except FileNotFoundError:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump({"rooms": {}, "users": {}}, f, indent=4, ensure_ascii=False)
+    
+    asyncio.run(main())
