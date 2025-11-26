@@ -42,7 +42,6 @@ def home():
 
 
 def run_web():
-    # run Flask in a separate thread so polling isn't blocked
     app_flask.run(host="0.0.0.0", port=KEEPALIVE_PORT)
 
 
@@ -111,15 +110,28 @@ def add_reindeer_exp(uid: str, amount: int):
     ensure_user_record(uid)
     u = data["users"][uid]
     u["reindeer_exp"] = u.get("reindeer_exp", 0) + amount
-    thresholds = [0, 20, 60, 150]  # XP thresholds for levels 0->1->2->3
+    thresholds = [0, 20, 60, 150]
     lvl = u.get("reindeer_level", 0)
     while lvl < len(thresholds) - 1 and u["reindeer_exp"] >= thresholds[lvl + 1]:
         lvl += 1
         u["reindeer_level"] = lvl
-        # award achievement at max
         if lvl >= 3 and "reindeer_master" not in u.get("achievements", []):
             u["achievements"].append("reindeer_master")
     save_data(data)
+
+
+def create_room_for_user(user):
+    code = gen_room_code()
+    data["rooms"][code] = {
+        "name": f"Комната {code}",
+        "owner_id": user.id,
+        "participants": {},
+        "started": False,
+        "assignments": {},
+        "deadline": (datetime.now(timezone.utc) + timedelta(days=2)).isoformat(),
+    }
+    save_data(data)
+    return code
 
 
 # -------------- BOT INITIALIZATION --------------
@@ -128,12 +140,34 @@ if not TOKEN:
     print("❌ TELEGRAM_BOT_TOKEN not set. Add it to Replit Secrets.")
     raise SystemExit(1)
 
-app = Application.builder().token(TOKEN).post_init(lambda app: app.job_queue).build()
+app = ApplicationBuilder().token(TOKEN).build()
 
 
-# -------------- COMMANDS --------------
+# -------------- REMINDERS using JobQueue --------------
+async def reminders_job(context: ContextTypes.DEFAULT_TYPE):
+    now = datetime.now(timezone.utc)
+    for code, room in data["rooms"].items():
+        if room.get("started"):
+            continue
+        try:
+            deadline = datetime.fromisoformat(room.get("deadline"))
+            if deadline.tzinfo is None:
+                deadline = deadline.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+        if now + timedelta(hours=1) > deadline and now < deadline:
+            for uid in room["participants"].keys():
+                try:
+                    await context.bot.send_message(int(uid), f"⏰ Напоминание: до дедлайна комнаты {code} остался ~1 час")
+                except Exception:
+                    pass
 
 
+if app.job_queue:
+    app.job_queue.run_repeating(reminders_job, interval=30 * 60, first=10)
+
+
+# ---------------- COMMANDS ----------------
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     uid = str(user.id)
@@ -155,21 +189,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 app.add_handler(CommandHandler("start", cmd_start))
 
 
-# create room logic (shared)
-def create_room_for_user(user):
-    code = gen_room_code()
-    data["rooms"][code] = {
-        "name": f"Комната {code}",
-        "owner_id": user.id,
-        "participants": {},
-        "started": False,
-        "assignments": {},
-        "deadline": (datetime.now(timezone.utc) + timedelta(days=2)).isoformat(),
-    }
-    save_data(data)
-    return code
-
-
+# ---------------- ROOM COMMANDS ----------------
 async def cmd_create_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     code = create_room_for_user(user)
@@ -238,7 +258,6 @@ app.add_handler(CommandHandler("wish", cmd_wish_start))
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     if context.user_data.get("awaiting_wish"):
-        # find a room where user is participant and not started
         for code, room in data["rooms"].items():
             if uid in room["participants"] and not room["started"]:
                 room["participants"][uid]["wish"] = update.message.text
@@ -256,122 +275,149 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
 
-async def cmd_mygiftee(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = str(update.effective_user.id)
-    for code, room in data["rooms"].items():
-        if uid in room["participants"]:
-            if not room["started"]:
-                await update.message.reply_text("Игра ещё не началась")
-                return
-            receiver = room["assignments"].get(uid)
-            if not receiver:
-                await update.message.reply_text("Назначение не найдено")
-                return
-            r = room["participants"][receiver]
-            await update.message.reply_text(
-                f"🎁 Ты даришь: {r['name']} (@{r.get('username','')})\nПожелание: {r.get('wish','(пусто)')}"
-            )
-            return
-    await update.message.reply_text("Вы не состоите ни в одной комнате")
+# ---------------- CALLBACK HANDLER ----------------
+async def callback_inline(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    data_cb = q.data
+    uid = str(q.from_user.id)
 
-
-app.add_handler(CommandHandler("mygiftee", cmd_mygiftee))
-
-
-async def cmd_start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user):
-        await update.message.reply_text("🚫 Только админ может запускать игру")
+    # CREATE ROOM
+    if data_cb == "create_room":
+        code = create_room_for_user(q.from_user)
+        await q.edit_message_text(f"🎉 Комната создана: {code}\nОтправь код друзьям.")
         return
-    args = context.args
-    if not args:
-        await update.message.reply_text("Использование: /start_game RXXXXX")
+
+    # JOIN ROOM
+    if data_cb == "join_room":
+        await q.edit_message_text("Отправьте /join_room RXXXXX или используйте /join_room <код>")
         return
-    code = args[0].upper()
-    if code not in data["rooms"]:
-        await update.message.reply_text("Комната не найдена")
+
+    # PROFILE
+    if data_cb == "my_reindeer":
+        class TmpUpdate:
+            def __init__(self, from_user, message):
+                self.effective_user = from_user
+                self.message = message
+                self.callback_query = q
+        tmp = TmpUpdate(q.from_user, q.message)
+        await cmd_profile(tmp, context)
         return
-    room = data["rooms"][code]
-    if room["started"]:
-        await update.message.reply_text("Игра уже запущена")
+
+    # MINI-GAMES MENU
+    if data_cb == "mini_games":
+        kb = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("🎯 Угадай число", callback_data="game_number")],
+                [InlineKeyboardButton("🧊 Монетка", callback_data="game_coin")],
+                [InlineKeyboardButton("🧭 Квест", callback_data="quest_menu")],
+                [InlineKeyboardButton("❄️ Снегопад (аним)", callback_data="animated_snow")],
+                [InlineKeyboardButton("🎁 Идея подарка", callback_data="gift_idea")],
+            ]
+        )
+        await q.edit_message_text("Выберите мини-игру:", reply_markup=kb)
         return
-    participants = list(room["participants"].keys())
-    if len(participants) < 2:
-        await update.message.reply_text("Нужно минимум 2 участника")
+
+    # NUMBER GAME
+    if data_cb == "game_number":
+        n = random.randint(1, 5)
+        context.user_data["secret_number"] = n
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton(str(i), callback_data=f"guess_{i}") for i in range(1, 6)]])
+        await q.edit_message_text("Я загадал число от 1 до 5 — угадай!", reply_markup=kb)
         return
-    random.shuffle(participants)
-    assignments = {}
-    for i, giver in enumerate(participants):
-        receiver = participants[(i + 1) % len(participants)]
-        assignments[giver] = receiver
-    room["assignments"] = assignments
-    room["started"] = True
-    save_data(data)
-    # notify
-    for giver, receiver in assignments.items():
-        try:
-            r = room["participants"][receiver]
-            await app.bot.send_message(
-                int(giver),
-                f"🎁 Твой получатель: {r['name']} (@{r.get('username','')})\nПожелание: {r.get('wish','(пусто)')}",
-            )
-        except Exception:
-            pass
-    await update.message.reply_text("✅ Игра запущена и игроки уведомлены")
 
-
-app.add_handler(CommandHandler("start_game", cmd_start_game))
-
-
-async def cmd_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user):
-        await update.message.reply_text("🚫 Только админ")
+    if data_cb.startswith("guess_"):
+        guess = int(data_cb.split("_")[1])
+        real = context.user_data.get("secret_number")
+        if guess == real:
+            add_reindeer_exp(uid, 10)
+            u = data["users"].setdefault(uid, {})
+            u["games_won"] = u.get("games_won", 0) + 1
+            save_data(data)
+            await q.edit_message_text("🎉 Верно! Ты получил 10 XP для оленёнка")
+        else:
+            await q.edit_message_text(f"❌ Неправильно — было {real}")
         return
-    args = context.args
-    if not args:
-        await update.message.reply_text("Использование: /members RXXXXX")
+
+    # COIN GAME
+    if data_cb == "game_coin":
+        side = random.choice(["Орёл 🦅", "Решка ❄️"])
+        u = data["users"].setdefault(uid, {})
+        if side.startswith("Орёл"):
+            u["coin_streak"] = u.get("coin_streak", 0) + 1
+            if u["coin_streak"] >= 5 and "lucky_coin" not in u.get("achievements", []):
+                u.setdefault("achievements", []).append("lucky_coin")
+        else:
+            u["coin_streak"] = 0
+        save_data(data)
+        await q.edit_message_text(f"🧊 Выпало: {side}")
         return
-    code = args[0].upper()
-    if code not in data["rooms"]:
-        await update.message.reply_text("Комната не найдена")
+
+    # QUEST MENU
+    if data_cb == "quest_menu":
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🎄 Начать квест", callback_data="quest_start")]])
+        await q.edit_message_text("✨ Новогодний квест — пройди три этапа!", reply_markup=kb)
         return
-    room = data["rooms"][code]
-    text = f"Комната {code} — участники:\n"
-    for uid, p in room["participants"].items():
-        text += f"• {p.get('name')} @{p.get('username','')} (id {uid})\n"
-    await update.message.reply_text(text)
 
-
-app.add_handler(CommandHandler("members", cmd_members))
-
-
-async def cmd_assignments(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user):
-        await update.message.reply_text("🚫 Только админ")
+    if data_cb == "quest_start":
+        kb = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("✨ Сияющая тропа", callback_data="quest_light")],
+                [InlineKeyboardButton("🌑 Тёмная тропа", callback_data="quest_dark")],
+            ]
+        )
+        await q.edit_message_text("Глава 1: Перед тобой две тропы", reply_markup=kb)
         return
-    args = context.args
-    if not args:
-        await update.message.reply_text("Использование: /assignments RXXXXX")
+
+    if data_cb in ("quest_light", "quest_dark"):
+        u = data["users"].setdefault(uid, {})
+        if data_cb == "quest_light":
+            if "snow_hero" not in u.get("achievements", []):
+                u.setdefault("achievements", []).append("snow_hero")
+            await q.edit_message_text("✨ Ты выбрал свет — получил Медаль Снежного Героя!")
+        else:
+            if "grinch_slayer" not in u.get("achievements", []):
+                u.setdefault("achievements", []).append("grinch_slayer")
+            await q.edit_message_text("🌑 Тёмная тропа — ты победил Гринча!")
+        u["quests_finished"] = u.get("quests_finished", 0) + 1
+        add_reindeer_exp(uid, 15)
+        save_data(data)
         return
-    code = args[0].upper()
-    if code not in data["rooms"]:
-        await update.message.reply_text("Комната не найдена")
+
+    # ANIMATED SNOW
+    if data_cb == "animated_snow":
+        frames = ["❄️", "✨", "❅", "☃️"]
+        for i in range(8):
+            fl = random.choice(frames)
+            kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"{fl} Снежинка {i+1}", callback_data="noop")]])
+            try:
+                await q.edit_message_reply_markup(reply_markup=kb)
+            except Exception:
+                pass
+            await asyncio.sleep(0.25)
+        await q.edit_message_text("❄️ Снегопад окончен!")
         return
-    room = data["rooms"][code]
-    if not room.get("started"):
-        await update.message.reply_text("Игра ещё не началась")
+
+    # GIFT IDEAS
+    if data_cb == "gift_idea":
+        ideas = [
+            "Беспроводные наушники — для музыки под ёлкой",
+            "Тёплый плед с оленями",
+            "Настольная игра для весёлой компании",
+            "Подарочная коробка шоколада и печенья",
+            "Абонемент в курс по интересам",
+        ]
+        await q.edit_message_text(f"🎁 Идея подарка: {random.choice(ideas)}")
         return
-    text = f"Распределение в комнате {code}:\n"
-    for g, r in room["assignments"].items():
-        gv = room["participants"].get(g, {})
-        rv = room["participants"].get(r, {})
-        text += f"• {gv.get('name')} -> {rv.get('name')}\n"
-    await update.message.reply_text(text)
+
+    # NOOP
+    await q.answer()
 
 
-app.add_handler(CommandHandler("assignments", cmd_assignments))
+app.add_handler(CallbackQueryHandler(callback_inline))
 
 
-# -------------- PROFILE --------------
+# ---------------- PROFILE ----------------
 async def cmd_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     ensure_user_record(uid)
@@ -394,179 +440,8 @@ async def cmd_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
 app.add_handler(CommandHandler("profile", cmd_profile))
 
 
-# -------------- CALLBACKS: mini-games, quest, snow, gift --------------
-async def callback_inline(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    data_cb = q.data
-
-    # create room: call helper directly
-    if data_cb == "create_room":
-        code = create_room_for_user(q.from_user)
-        await q.edit_message_text(f"🎉 Комната создана: {code}\nОтправь код друзьям.")
-        return
-
-    if data_cb == "join_room":
-        await q.edit_message_text("Отправьте /join_room RXXXXX или используйте /join_room <код>")
-        return
-
-    if data_cb == "my_reindeer":
-        # call profile handler but adapted to callback (we can reuse cmd_profile by passing q as update)
-        class TmpUpdate:
-            def __init__(self, from_user, message):
-                self.effective_user = from_user
-                self.message = message
-                self.callback_query = q
-
-        # Build a pseudo update that has effective_user
-        tmp = TmpUpdate(q.from_user, q.message)
-        await cmd_profile(tmp, context)
-        return
-
-    if data_cb == "mini_games":
-        kb = InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton("🎯 Угадай число", callback_data="game_number")],
-                [InlineKeyboardButton("🧊 Монетка", callback_data="game_coin")],
-                [InlineKeyboardButton("🧭 Квест", callback_data="quest_menu")],
-                [InlineKeyboardButton("❄️ Снегопад (аним)", callback_data="animated_snow")],
-                [InlineKeyboardButton("🎁 Идея подарка", callback_data="gift_idea")],
-            ]
-        )
-        await q.edit_message_text("Выберите мини-игру:", reply_markup=kb)
-        return
-
-    # number game
-    if data_cb == "game_number":
-        n = random.randint(1, 5)
-        context.user_data["secret_number"] = n
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton(str(i), callback_data=f"guess_{i}") for i in range(1, 6)]])
-        await q.edit_message_text("Я загадал число от 1 до 5 — угадай!", reply_markup=kb)
-        return
-
-    if data_cb and data_cb.startswith("guess_"):
-        guess = int(data_cb.split("_")[1])
-        real = context.user_data.get("secret_number")
-        if guess == real:
-            uid = str(q.from_user.id)
-            add_reindeer_exp(uid, 10)
-            data["users"].setdefault(uid, {}).setdefault("games_won", 0)
-            data["users"][uid]["games_won"] = data["users"][uid].get("games_won", 0) + 1
-            save_data(data)
-            await q.edit_message_text("🎉 Верно! Ты получил 10 XP для оленёнка")
-        else:
-            await q.edit_message_text(f"❌ Неправильно — было {real}")
-        return
-
-    # coin
-    if data_cb == "game_coin":
-        side = random.choice(["Орёл 🦅", "Решка ❄️"])
-        uid = str(q.from_user.id)
-        u = data["users"].setdefault(uid, {})
-        if side.startswith("Орёл"):
-            u["coin_streak"] = u.get("coin_streak", 0) + 1
-            if u["coin_streak"] >= 5 and "lucky_coin" not in u.get("achievements", []):
-                u.setdefault("achievements", []).append("lucky_coin")
-        else:
-            u["coin_streak"] = 0
-        save_data(data)
-        await q.edit_message_text(f"🧊 Выпало: {side}")
-        return
-
-    # quest menu
-    if data_cb == "quest_menu":
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🎄 Начать квест", callback_data="quest_start")]])
-        await q.edit_message_text("✨ Новогодний квест — пройди три этапа!", reply_markup=kb)
-        return
-
-    if data_cb == "quest_start":
-        kb = InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton("✨ Сияющая тропа", callback_data="quest_light")],
-                [InlineKeyboardButton("🌑 Тёмная тропа", callback_data="quest_dark")],
-            ]
-        )
-        await q.edit_message_text("Глава 1: Перед тобой две тропы", reply_markup=kb)
-        return
-
-    if data_cb in ("quest_light", "quest_dark"):
-        uid = str(q.from_user.id)
-        u = data["users"].setdefault(uid, {})
-        if data_cb == "quest_light":
-            if "snow_hero" not in u.get("achievements", []):
-                u.setdefault("achievements", []).append("snow_hero")
-            await q.edit_message_text("✨ Ты выбрал свет — получил Медаль Снежного Героя!")
-        else:
-            if "grinch_slayer" not in u.get("achievements", []):
-                u.setdefault("achievements", []).append("grinch_slayer")
-            await q.edit_message_text("🌑 Тёмная тропа — ты победил Гринча!")
-        u["quests_finished"] = u.get("quests_finished", 0) + 1
-        add_reindeer_exp(uid, 15)
-        save_data(data)
-        return
-
-    # animated snow: use asyncio.sleep so we don't block
-    if data_cb == "animated_snow":
-        frames = ["❄️", "✨", "❅", "☃️"]
-        for i in range(8):
-            fl = random.choice(frames)
-            kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"{fl} Снежинка {i+1}", callback_data="noop")]])
-            try:
-                await q.edit_message_reply_markup(reply_markup=kb)
-            except Exception:
-                pass
-            await asyncio.sleep(0.25)
-        await q.edit_message_text("❄️ Снегопад окончен!")
-        return
-
-    if data_cb == "gift_idea":
-        ideas = [
-            "Беспроводные наушники — для музыки под ёлкой",
-            "Тёплый плед с оленями",
-            "Настольная игра для весёлой компании",
-            "Подарочная коробка шоколада и печенья",
-            "Абонемент в курс по интересам",
-        ]
-        await q.edit_message_text(f"🎁 Идея подарка: {random.choice(ideas)}")
-        return
-
-    # noop or unknown
-    await q.answer()
-
-
-app.add_handler(CallbackQueryHandler(callback_inline))
-
-
-# -------------- REMINDERS using JobQueue (safe async) --------------
-async def reminders_job(context: ContextTypes.DEFAULT_TYPE):
-    now = datetime.now(timezone.utc)
-    for code, room in data["rooms"].items():
-        if room.get("started"):
-            continue
-        # parse deadline as UTC-aware
-        try:
-            deadline = datetime.fromisoformat(room.get("deadline"))
-            if deadline.tzinfo is None:
-                # assume utc if not present
-                deadline = deadline.replace(tzinfo=timezone.utc)
-        except Exception:
-            continue
-        # if within one hour
-        if now + timedelta(hours=1) > deadline and now < deadline:
-            for uid in room["participants"].keys():
-                try:
-                    await context.bot.send_message(int(uid), f"⏰ Напоминание: до дедлайна комнаты {code} остался ~1 час")
-                except Exception:
-                    pass
-
-
-# schedule reminders every 30 minutes
-app.job_queue.run_repeating(reminders_job, interval=30 * 60, first=10)
-
-
 # -------------- START --------------
 if __name__ == "__main__":
     keep_alive()
     print("✅ Бот запускается — polling...")
-    # start polling; Application manages the asyncio loop internally
     app.run_polling()
