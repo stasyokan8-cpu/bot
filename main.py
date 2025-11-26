@@ -156,9 +156,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = menu_keyboard(admin)
     
     await update.message.reply_text(
-        f"🎄 *Добро пожаловать, {user.first_name}!* 🎅\n\n"
+        f"🎄 Добро пожаловать, {user.first_name}! 🎅\n\n"
         "Этот бот — портал в волшебный мир Тайного Санты! 🎁✨\n\n"
-        "*Что можно делать:*\n"
+        "Что можно делать:\n"
         "• 🎅 Присоединиться к комнате\n"
         "• 🎁 Написать пожелание\n"
         "• 🎮 Играть в мини-игры\n"
@@ -166,7 +166,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• ❄️ Наслаждаться снегопадом\n"
         "• 🏆 Соревноваться с друзьями\n\n"
         "Выбери действие ниже 👇",
-        parse_mode="Markdown",
         reply_markup=keyboard
     )
 
@@ -178,9 +177,8 @@ async def wish_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["wish_mode"] = True
     await update.callback_query.edit_message_text(
         "🎁 Напиши своё новогоднее пожелание!\n\n"
-        "✨ *После запуска игры менять будет нельзя!*\n\n"
+        "✨ После запуска игры менять будет нельзя!\n\n"
         "Просто напиши сообщение с твоим пожеланием...",
-        parse_mode="Markdown",
         reply_markup=back_to_menu_keyboard()
     )
 
@@ -230,12 +228,11 @@ async def create_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     admin = is_admin(update)
     await update.message.reply_text(
-        f"🎄 *Комната создана!*\n\n"
-        f"*Код комнаты:* `{code}`\n"
-        f"*Ссылка для приглашения:*\n"
+        f"🎄 Комната создана!\n\n"
+        f"Код комнаты: {code}\n"
+        f"Ссылка для приглашения:\n"
         f"https://t.me/{(await context.bot.get_me()).username}?start=join_{code}\n\n"
         f"Приглашай друзей! Они могут присоединиться через меню бота.",
-        parse_mode="Markdown",
         reply_markup=menu_keyboard(admin)
     )
 
@@ -245,13 +242,12 @@ async def create_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def join_room_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(
-        "🎅 *Присоединиться к комнате*\n\n"
+        "🎅 Присоединиться к комнате\n\n"
         "Чтобы присоединиться к комнате Тайного Санты:\n\n"
         "1. Попроси у организатора код комнаты (формат: RXXXXX)\n"
         "2. Используй команду:\n"
-        "   `/join_room RXXXXX`\n\n"
+        "   /join_room RXXXXX\n\n"
         "Или просто напиши код комнаты:",
-        parse_mode="Markdown",
         reply_markup=back_to_menu_keyboard()
     )
     context.user_data["join_mode"] = True
@@ -301,11 +297,10 @@ async def join_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     admin = is_admin(update)
     await update.message.reply_text(
-        f"✨ *Ты присоединился к комнате!* 🎄\n\n"
-        f"*Код комнаты:* `{code}`\n"
-        f"*Участников:* {len(room['members'])}\n\n"
+        f"✨ Ты присоединился к комнате! 🎄\n\n"
+        f"Код комнаты: {code}\n"
+        f"Участников: {len(room['members'])}\n\n"
         f"Теперь напиши своё пожелание подарка через меню! 🎁",
-        parse_mode="Markdown",
         reply_markup=menu_keyboard(admin)
     )
 
@@ -330,16 +325,16 @@ async def show_room_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.callback_query.answer("Ты не в комнате!", show_alert=True)
         return
     
-    members_text = f"👥 *Участники комнаты {room_code}:*\n\n"
+    members_text = f"👥 Участники комнаты {room_code}:\n\n"
     for i, (user_id, member) in enumerate(user_room["members"].items(), 1):
         wish_status = "✅" if member["wish"] else "❌"
-        members_text += f"{i}. {member['name']} (@{member['username']}) {wish_status}\n"
+        username = f"@{member['username']}" if member["username"] != "без username" else "без username"
+        members_text += f"{i}. {member['name']} ({username}) {wish_status}\n"
     
-    members_text += f"\n*Всего участников:* {len(user_room['members'])}"
+    members_text += f"\nВсего участников: {len(user_room['members'])}"
     
     await update.callback_query.edit_message_text(
         members_text,
-        parse_mode="Markdown",
         reply_markup=back_to_menu_keyboard()
     )
 
@@ -376,9 +371,8 @@ async def start_game_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="back_menu")])
     
     await update.callback_query.edit_message_text(
-        "🚀 *Запуск игры Тайный Санта*\n\n"
+        "🚀 Запуск игры Тайный Санта\n\n"
         "Выбери комнату для запуска:",
-        parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -433,11 +427,10 @@ async def start_specific_game(update: Update, context: ContextTypes.DEFAULT_TYPE
         try:
             await context.bot.send_message(
                 giver,
-                f"🎁 *Тайный Санта запущен!* 🎄\n\n"
-                f"*Твой получатель:* {m['name']} (@{m['username']})\n\n"
-                f"✨ *Его пожелание:* {m['wish']}\n\n"
-                f"Удачи в выборе подарка! 🎅",
-                parse_mode="Markdown"
+                f"🎁 Тайный Санта запущен! 🎄\n\n"
+                f"Твой получатель: {m['name']} (@{m['username']})\n\n"
+                f"✨ Его пожелание: {m['wish']}\n\n"
+                f"Удачи в выборе подарка! 🎅"
             )
             successful_sends += 1
         except Exception as e:
@@ -445,11 +438,10 @@ async def start_specific_game(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     admin = is_admin(update)
     await q.edit_message_text(
-        f"🎄 *Игра запущена в комнате {code}!* ✨\n\n"
-        f"*Участников:* {len(members)}\n"
-        f"*Сообщений отправлено:* {successful_sends}/{len(members)}\n\n"
+        f"🎄 Игра запущена в комнате {code}! ✨\n\n"
+        f"Участников: {len(members)}\n"
+        f"Сообщений отправлено: {successful_sends}/{len(members)}\n\n"
         f"Все участники получили своих получателей! 🎁",
-        parse_mode="Markdown",
         reply_markup=menu_keyboard(admin)
     )
 
@@ -478,11 +470,11 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Добавляем информацию о скине
     skin_info = ""
     if user_info["reindeer_skin"] == "rainbow":
-        skin_info = "\n🌈 *Особый вид:* Радужный Олень!"
+        skin_info = "\n🌈 Особый вид: Радужный Олень!"
     elif user_info["reindeer_skin"] == "ice_spirit":
-        skin_info = "\n❄️ *Особый вид:* Ледяной Дух Олень!"
+        skin_info = "\n❄️ Особый вид: Ледяной Дух Олень!"
     elif user_info["reindeer_skin"] == "cosmic":
-        skin_info = "\n🌌 *Особый вид:* Космический Олень!"
+        skin_info = "\n🌌 Особый вид: Космический Олень!"
     
     # Получаем достижения
     ACHIEVEMENTS = {
@@ -504,13 +496,13 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         achievements_text = "Пока нет достижений. Будь активнее! 🎄"
     
     profile_text = f"""
-🎅 *Профиль игрока* @{user.username if user.username else user.first_name}
+🎅 Профиль игрока @{user.username if user.username else user.first_name}
 
-🦌 *Твой оленёнок:* 
+🦌 Твой оленёнок: 
 {reindeer_text} 
 {skin_info}
 
-🎖 *Достижения:* 
+🎖 Достижения: 
 {achievements_text}
 
 🎮 Статистика:
@@ -524,13 +516,11 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
         await update.callback_query.edit_message_text(
             profile_text, 
-            parse_mode="Markdown",
             reply_markup=back_to_menu_keyboard()
         )
     else:
         await update.message.reply_text(
             profile_text, 
-            parse_mode="Markdown",
             reply_markup=back_to_menu_keyboard()
         )
 
@@ -554,7 +544,7 @@ async def show_top_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Сортируем по очкам
     player_stats.sort(key=lambda x: x[1], reverse=True)
     
-    top_text = "🏆 *Топ игроков:* \n\n"
+    top_text = "🏆 Топ игроков: \n\n"
     
     if not player_stats:
         top_text += "Пока никто не играл... Будь первым! 🎄"
@@ -572,7 +562,6 @@ async def show_top_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.callback_query.edit_message_text(
         top_text, 
-        parse_mode="Markdown",
         reply_markup=back_to_menu_keyboard()
     )
 
@@ -588,8 +577,7 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif q.data == "toast":
         await q.edit_message_text(
-            f"✨ *Тост дня:*\n{toast_of_day()}", 
-            parse_mode="Markdown",
+            f"✨ Тост дня:\n{toast_of_day()}", 
             reply_markup=back_to_menu_keyboard()
         )
 
@@ -598,13 +586,12 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.edit_message_text("🚫 Доступ запрещён.")
             return
         data = load_data()
-        txt = "📦 *Комнаты:*\n\n"
+        txt = "📦 Комнаты:\n\n"
         for c, room in data["rooms"].items():
             status = "✅ Запущена" if room["game_started"] else "⏳ Ожидание"
-            txt += f"`{c}` — {len(room['members'])} участников — {status}\n"
+            txt += f"{c} — {len(room['members'])} участников — {status}\n"
         await q.edit_message_text(
             txt, 
-            parse_mode="Markdown",
             reply_markup=back_to_menu_keyboard(True)
         )
 
@@ -613,15 +600,14 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.edit_message_text("🚫 Доступ запрещён.")
             return
         data = load_data()
-        txt = "🎁 *Все пожелания:*\n"
+        txt = "🎁 Все пожелания:\n"
         for c, room in data["rooms"].items():
-            txt += f"\n*Комната {c}:*\n"
+            txt += f"\nКомната {c}:\n"
             for uid, m in room["members"].items():
                 wish = m['wish'] if m['wish'] else "❌ Не указано"
                 txt += f"— {m['name']}: {wish}\n"
         await q.edit_message_text(
             txt, 
-            parse_mode="Markdown",
             reply_markup=back_to_menu_keyboard(True)
         )
 
@@ -630,17 +616,16 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.edit_message_text("🚫 Доступ запрещён.")
             return
         data = load_data()
-        txt = "🔀 *Распределение:*\n"
+        txt = "🔀 Распределение:\n"
         for c, room in data["rooms"].items():
             if not room["game_started"]: continue
-            txt += f"\n*Комната {c}:*\n"
+            txt += f"\nКомната {c}:\n"
             for g, r in room["assign"].items():
                 mg = room["members"][g]
                 mr = room["members"][r]
                 txt += f"🎅 {mg['name']} → 🎁 {mr['name']}\n"
         await q.edit_message_text(
             txt, 
-            parse_mode="Markdown",
             reply_markup=back_to_menu_keyboard(True)
         )
         
@@ -691,8 +676,7 @@ async def quest_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_menu")]
     ])
     await update.callback_query.edit_message_text(
-        "✨ *Новогодний квест!* Пройди 3 уровня, чтобы получить титул Главного Снеговика!",
-        parse_mode="Markdown",
+        "✨ Новогодний квест! Пройди 3 уровня, чтобы получить титул Главного Снеговика!",
         reply_markup=kb
     )
 
@@ -705,21 +689,21 @@ async def quest_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("🎁 Открыть первый подарок", callback_data="quest_lvl1")]
         ])
-        await q.edit_message_text("🎄 *Уровень 1:* Найди подарок под ёлкой!", parse_mode="Markdown", reply_markup=kb)
+        await q.edit_message_text("🎄 Уровень 1: Найди подарок под ёлкой!", reply_markup=kb)
 
     elif q.data == "quest_lvl1":
         context.user_data["quest_level"] = 2
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("❄️ Сдуть снег", callback_data="quest_lvl2")]
         ])
-        await q.edit_message_text("✨ Ты нашёл подарок! Но он под снегом...", parse_mode="Markdown", reply_markup=kb)
+        await q.edit_message_text("✨ Ты нашёл подарок! Но он под снегом...", reply_markup=kb)
 
     elif q.data == "quest_lvl2":
         context.user_data["quest_level"] = 3
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("🎅 Позвать Санту", callback_data="quest_lvl3")]
         ])
-        await q.edit_message_text("❄️ Снег сдут! Осталось позвать Санту!", parse_mode="Markdown", reply_markup=kb)
+        await q.edit_message_text("❄️ Снег сдут! Осталось позвать Санту!", reply_markup=kb)
 
     elif q.data == "quest_lvl3":
         user = update.effective_user
@@ -740,12 +724,11 @@ async def quest_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         admin = is_admin(update)
         await q.edit_message_text(
-            f"🎉 *Поздравляем!* Ты стал Главным Снеговиком Нового Года!\n\n"
+            f"🎉 Поздравляем! Ты стал Главным Снеговиком Нового Года!\n\n"
             f"✨ Награды:\n"
             f"• +50 опыта оленёнку\n"
             f"• Достижение 'Снежный Герой'\n"
             f"• Редкий предмет: {rare_item}",
-            parse_mode="Markdown",
             reply_markup=menu_keyboard(admin)
         )
 
@@ -786,8 +769,7 @@ async def gift_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
     idea = random.choice(ideas)
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(
-        f"🎁 *Идея подарка:* {idea}", 
-        parse_mode="Markdown",
+        f"🎁 Идея подарка: {idea}", 
         reply_markup=back_to_menu_keyboard()
     )
 
@@ -802,7 +784,7 @@ async def mini_game_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("⚔️ Битва с Гринчем", callback_data="game_grinch")],
         [InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_menu")],
     ])
-    await update.callback_query.edit_message_text("🎮 *Мини-игры!* Выбирай:", parse_mode="Markdown", reply_markup=kb)
+    await update.callback_query.edit_message_text("🎮 Мини-игры! Выбирай:", reply_markup=kb)
 
 async def game_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -850,22 +832,19 @@ async def game_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if context.user_data["coin_wins"] >= 5:
                 add_achievement(user.id, "lucky_coin")
                 await q.edit_message_text(
-                    f"🧊 Монетка упала: *{side}!*\n\n🎉 Ты выиграл 5 раз подряд! Получено достижение 'Монетка Удачи'!", 
-                    parse_mode="Markdown",
+                    f"🧊 Монетка упала: {side}!\n\n🎉 Ты выиграл 5 раз подряд! Получено достижение 'Монетка Удачи'!", 
                     reply_markup=back_to_menu_keyboard()
                 )
                 context.user_data["coin_wins"] = 0
             else:
                 await q.edit_message_text(
-                    f"🧊 Монетка упала: *{side}!*", 
-                    parse_mode="Markdown",
+                    f"🧊 Монетка упала: {side}!", 
                     reply_markup=back_to_menu_keyboard()
                 )
         else:
             context.user_data["coin_wins"] = 0
             await q.edit_message_text(
-                f"🧊 Монетка упала: *{side}!*", 
-                parse_mode="Markdown",
+                f"🧊 Монетка упала: {side}!", 
                 reply_markup=back_to_menu_keyboard()
             )
 
@@ -917,7 +896,7 @@ async def grinch_battle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result = "💔 Гринч победил... Но ты сможешь в следующий раз!"
     
     battle_text = f"""
-⚔️ *Битва с Гринчем!*
+⚔️ Битва с Гринчем!
 
 {grinch_attack}
 Ты используешь: {player_move}
@@ -930,7 +909,7 @@ async def grinch_battle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("⬅️ Назад в игры", callback_data="mini_games")]
     ])
     
-    await q.edit_message_text(battle_text, parse_mode="Markdown", reply_markup=kb)
+    await q.edit_message_text(battle_text, reply_markup=kb)
 
 # -------------------------------------------------------------------
 # СНЕГОПАД
