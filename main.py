@@ -8,6 +8,7 @@ import random
 import string
 import asyncio
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 from telegram import (
     Update, InlineKeyboardMarkup, InlineKeyboardButton
@@ -18,7 +19,7 @@ from telegram.ext import (
 )
 
 # Безопасное получение токена для Replit
-TOKEN = os.environ.get("TELEGRAM_TOKEN", "1667037381:AAFdA7l6LcMidWsgrerdOkpBXfNF2gbNsvo")
+TOKEN = os.environ.get("TELEGRAM_TOKEN", "YOUR_BOT_TOKEN_HERE")
 ADMIN_USERNAME = "BeellyKid"
 DATA_FILE = "santa_data.json"
 
@@ -668,7 +669,7 @@ async def snowfall(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # -------------------------------------------------------------------
 # НАПОМИНАНИЯ
 # -------------------------------------------------------------------
-async def reminder_loop(app: Application):
+async def reminder_loop():
     while True:
         try:
             data = load_data()
@@ -677,10 +678,12 @@ async def reminder_loop(app: Application):
             for code, room in data["rooms"].items():
                 if room.get("game_started"):
                     continue
-                deadline = datetime.fromisoformat(room["deadline"])
+                deadline = datetime.fromisoformat(room["deadline"]).replace(tzinfo=timezone.utc)
                 if now + timedelta(hours=1) > deadline:
                     for uid in room["members"]:
                         try:
+                            # Нужно получить application из глобального контекста
+                            from main import app
                             await app.bot.send_message(
                                 int(uid), 
                                 f"⏰ *Напоминание!* До дедлайна в комнате {code} остался 1 час!",
@@ -701,8 +704,6 @@ async def start_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🚫 Доступ запрещён.")
         return
         
-    # Запускаем в фоне без создания новой задачи
-    asyncio.get_event_loop().create_task(reminder_loop(context.application))
     await update.message.reply_text("🔔 Напоминания запущены!")
 
 # -------------------------------------------------------------------
@@ -748,9 +749,13 @@ async def show_top(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(top_text, parse_mode="Markdown")
 
-# MAIN
 # -------------------------------------------------------------------
-def main():
+# ОСНОВНОЙ ЗАПУСК
+# -------------------------------------------------------------------
+def run_bot():
+    """Запуск бота в отдельном потоке"""
+    global app
+    
     # Загружаем данные при старте
     load_data()
     
@@ -772,3 +777,26 @@ def main():
     app.add_handler(CallbackQueryHandler(game_handler, pattern="^game"))
     app.add_handler(CallbackQueryHandler(grinch_battle, pattern="^game_grinch"))
     
+    # Обработчик текстовых сообщений
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+
+    print("🎄 Бот запускается на Replit! ❄️✨")
+    print("Для остановки нажмите Ctrl+C")
+    
+    # Запускаем бота
+    app.run_polling()
+
+# Глобальная переменная для app
+app = None
+
+if __name__ == "__main__":
+    # Создаем файл данных если его нет
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            pass
+    except FileNotFoundError:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump({"rooms": {}, "users": {}}, f, indent=4, ensure_ascii=False)
+    
+    # Запускаем бота в основном потоке
+    run_bot()
