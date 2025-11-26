@@ -19,7 +19,7 @@ from telegram.ext import (
 )
 
 # Токен бота
-TOKEN = "1667037381:AAFdA7l6LcMidWsgrerdOkpBXfNF2gbNsvo"
+TOKEN = "8299215190:AAEqLfMOTjywx_jOeT-Kv1I5oKdgbdWzN9Y"
 ADMIN_USERNAME = "BeellyKid"
 DATA_FILE = "santa_data.json"
 
