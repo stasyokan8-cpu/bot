@@ -1,0 +1,3 @@
+# .replit
+run = "python main.py"
+modules = ["python3-12"]
