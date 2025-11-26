@@ -8,7 +8,7 @@ import random
 import string
 import asyncio
 import os
-import threading
+import sys
 from datetime import datetime, timedelta, timezone
 from telegram import (
     Update, InlineKeyboardMarkup, InlineKeyboardButton
@@ -18,10 +18,13 @@ from telegram.ext import (
     CallbackQueryHandler, ContextTypes, filters
 )
 
-# Безопасное получение токена для Replit
-TOKEN = os.environ.get("TELEGRAM_TOKEN", "YOUR_BOT_TOKEN_HERE")
+# Токен бота
+TOKEN = "1667037381:AAFdA7l6LcMidWsgrerdOkpBXfNF2gbNsvo"
 ADMIN_USERNAME = "BeellyKid"
 DATA_FILE = "santa_data.json"
+
+print(f"🎄 Запуск Secret Santa Bot...")
+print(f"🤖 Токен: {TOKEN[:10]}...")  # Показываем только начало токена для безопасности
 
 # Глобальная переменная для хранения данных
 user_data = {}
@@ -667,46 +670,6 @@ async def snowfall(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(row)
 
 # -------------------------------------------------------------------
-# НАПОМИНАНИЯ
-# -------------------------------------------------------------------
-async def reminder_loop():
-    while True:
-        try:
-            data = load_data()
-            now = datetime.now(timezone.utc)
-
-            for code, room in data["rooms"].items():
-                if room.get("game_started"):
-                    continue
-                deadline = datetime.fromisoformat(room["deadline"]).replace(tzinfo=timezone.utc)
-                if now + timedelta(hours=1) > deadline:
-                    for uid in room["members"]:
-                        try:
-                            # Нужно получить application из глобального контекста
-                            from main import app
-                            await app.bot.send_message(
-                                int(uid), 
-                                f"⏰ *Напоминание!* До дедлайна в комнате {code} остался 1 час!",
-                                parse_mode="Markdown"
-                            )
-                        except Exception as e:
-                            print(f"Ошибка отправки напоминания: {e}")
-            await asyncio.sleep(3600)  # Проверка каждый час
-        except Exception as e:
-            print(f"Ошибка в reminder_loop: {e}")
-            await asyncio.sleep(60)
-
-# -------------------------------------------------------------------
-# КОМАНДА ДЛЯ РУЧНОГО ЗАПУСКА НАПОМИНАНИЙ
-# -------------------------------------------------------------------
-async def start_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update):
-        await update.message.reply_text("🚫 Доступ запрещён.")
-        return
-        
-    await update.message.reply_text("🔔 Напоминания запущены!")
-
-# -------------------------------------------------------------------
 # ТОП ИГРОКОВ
 # -------------------------------------------------------------------
 async def show_top(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -752,13 +715,12 @@ async def show_top(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # -------------------------------------------------------------------
 # ОСНОВНОЙ ЗАПУСК
 # -------------------------------------------------------------------
-def run_bot():
-    """Запуск бота в отдельном потоке"""
-    global app
-    
+def main():
+    """Запуск бота"""
     # Загружаем данные при старте
     load_data()
     
+    # Создаем application
     app = Application.builder().token(TOKEN).build()
 
     # Основные команды
@@ -768,7 +730,6 @@ def run_bot():
     app.add_handler(CommandHandler("start_game", start_game))
     app.add_handler(CommandHandler("snowfall", snowfall))
     app.add_handler(CommandHandler("top", show_top))
-    app.add_handler(CommandHandler("start_reminders", start_reminders))
     app.add_handler(CommandHandler("profile", show_profile))
 
     # Обработчики callback'ов
@@ -780,23 +741,29 @@ def run_bot():
     # Обработчик текстовых сообщений
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-    print("🎄 Бот запускается на Replit! ❄️✨")
-    print("Для остановки нажмите Ctrl+C")
+    print("🎄 Бот запускается...")
+    print("🤖 Используется токен:", TOKEN[:10] + "...")
+    print("✨ Secret Santa Bot готов к работе!")
+    print("⏹️ Для остановки нажмите Ctrl+C")
     
     # Запускаем бота
     app.run_polling()
-
-# Глобальная переменная для app
-app = None
 
 if __name__ == "__main__":
     # Создаем файл данных если его нет
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             pass
+        print("📁 Файл данных найден")
     except FileNotFoundError:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump({"rooms": {}, "users": {}}, f, indent=4, ensure_ascii=False)
+        print("📁 Создан новый файл данных")
     
-    # Запускаем бота в основном потоке
-    run_bot()
+    # Запускаем бота
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n🛑 Бот остановлен")
+    except Exception as e:
+        print(f"❌ Критическая ошибка: {e}")
