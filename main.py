@@ -128,7 +128,8 @@ if not TOKEN:
     print("❌ TELEGRAM_BOT_TOKEN not set. Add it to Replit Secrets.")
     raise SystemExit(1)
 
-app = ApplicationBuilder().token(TOKEN).build()
+app = Application.builder().token(TOKEN).post_init(lambda app: app.job_queue).build()
+
 
 # -------------- COMMANDS --------------
 
