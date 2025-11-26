@@ -2,6 +2,8 @@
 # Всё твоё волшебство + фиксы под Replit = 24/7 без ошибок
 
 import json, random, string, asyncio, os, logging
+import nest_asyncio
+nest_asyncio.apply()
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
@@ -370,15 +372,20 @@ async def reminder_loop(app: Application):
                     for uid in room["members"]:
                         try:
                             await app.bot.send_message(int(uid),
-                                f"*Напоминание!*\nДо дедлайна комнаты `{code}` ~1 час!\nВведи пожелание",
+                                f"*Напоминание!*\nДо дедлайна комнаты `{code}` остался ~1 час!\nВведи пожелание!",
                                 parse_mode="Markdown")
                         except: pass
             except: pass
 
+
 # ====================== ЗАПУСК ======================
-async def run_bot():
+def main():
+    # Flask keep-alive (уже запущен выше)
+    print("Бот запускается...")
+
     app = Application.builder().token(TOKEN).build()
 
+    # Все хендлеры
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("create_room", create_room))
     app.add_handler(CommandHandler("join_room", join_room))
@@ -386,11 +393,17 @@ async def run_bot():
     app.add_handler(CallbackQueryHandler(inline_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
+    # Запускаем напоминания
     app.create_task(reminder_loop(app))
 
-    print("Бот полностью запущен! Всё работает — снег, квесты, игры, напоминания!")
-    await app.run_polling(drop_pending_updates=True)
+    print("Бот полностью запущен! Снегопад, квест, игры, тосты — всё работает 24/7!")
+
+    # ← ЭТО САМОЕ ГЛАВНОЕ: запускаем без asyncio.run()
+    app.run_polling(drop_pending_updates=True)
+
 
 if __name__ == "__main__":
+    import nest_asyncio
+    nest_asyncio.apply()    # ← Обязательно!
     logging.basicConfig(level=logging.INFO)
-    asyncio.run(run_bot())
+    main()                  # ← Просто вызываем функцию
