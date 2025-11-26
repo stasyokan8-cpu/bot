@@ -8,7 +8,7 @@ import random
 import string
 import asyncio
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from telegram import (
     Update, InlineKeyboardMarkup, InlineKeyboardButton
 )
@@ -195,7 +195,7 @@ async def create_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "members": {},
         "game_started": False,
         "assign": {},
-        "deadline": (datetime.utcnow() + timedelta(days=2)).isoformat()
+        "deadline": (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
     }
     save_data(data)
 
@@ -422,34 +422,17 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     elif q.data == "snowfall":
         await animated_snowfall_buttons(update, context)
+        
+    elif q.data == "back_menu":
+        admin = is_admin(update)
+        await q.edit_message_text(
+            "🎄 Возвращаемся в главное меню...",
+            reply_markup=menu_keyboard(admin)
+        )
 
 # -------------------------------------------------------------------
 # КВЕСТ С УРОВНЯМИ
 # -------------------------------------------------------------------
-QUEST_STAGES = {
-    1: {
-        "text": "🎄 *Глава 1: Зов Севера*\nТы подходишь к заснеженному лесу. Слышен звон колокольчиков...\nПеред тобой две тропы!",
-        "choices": [
-            ("Пойти по сияющей тропе ✨", "light_path"),
-            ("Пойти по тёмной тропе 🌑", "dark_path")
-        ]
-    },
-    "light_path": {
-        "text": "✨ *Глава 2: Свет надежды*\nСияние вокруг становится ярче. Ты находишь магический снежок!",
-        "reward": "❄ Магический Снежок",
-        "next": 2
-    },
-    "dark_path": {
-        "text": "🌑 *Глава 2: Тень зимы*\nТемнота сгущается, но ты находишь ледяной клинок!",
-        "reward": "🗡 Ледяной Клинок",
-        "next": 2
-    },
-    2: {
-        "text": "🎁 *Финал квеста*\nТы выходишь на поляну, где стоит огромная новогодняя ёлка.\nПоздравляем, герой! Ты прошёл квест!",
-        "reward": "🏆 Медаль Снежного Героя"
-    }
-}
-
 async def quest_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
     kb = InlineKeyboardMarkup([
@@ -687,24 +670,28 @@ async def snowfall(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # -------------------------------------------------------------------
 async def reminder_loop(app: Application):
     while True:
-        data = load_data()
-        now = datetime.utcnow()
+        try:
+            data = load_data()
+            now = datetime.now(timezone.utc)
 
-        for code, room in data["rooms"].items():
-            if room.get("game_started"):
-                continue
-            deadline = datetime.fromisoformat(room["deadline"])
-            if now + timedelta(hours=1) > deadline:
-                for uid in room["members"]:
-                    try:
-                        await app.bot.send_message(
-                            int(uid), 
-                            f"⏰ *Напоминание!* До дедлайна в комнате {code} остался 1 час!",
-                            parse_mode="Markdown"
-                        )
-                    except Exception as e:
-                        print(f"Ошибка отправки напоминания: {e}")
-        await asyncio.sleep(3600)  # Проверка каждый час
+            for code, room in data["rooms"].items():
+                if room.get("game_started"):
+                    continue
+                deadline = datetime.fromisoformat(room["deadline"])
+                if now + timedelta(hours=1) > deadline:
+                    for uid in room["members"]:
+                        try:
+                            await app.bot.send_message(
+                                int(uid), 
+                                f"⏰ *Напоминание!* До дедлайна в комнате {code} остался 1 час!",
+                                parse_mode="Markdown"
+                            )
+                        except Exception as e:
+                            print(f"Ошибка отправки напоминания: {e}")
+            await asyncio.sleep(3600)  # Проверка каждый час
+        except Exception as e:
+            print(f"Ошибка в reminder_loop: {e}")
+            await asyncio.sleep(60)
 
 # -------------------------------------------------------------------
 # КОМАНДА ДЛЯ РУЧНОГО ЗАПУСКА НАПОМИНАНИЙ
@@ -714,7 +701,8 @@ async def start_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🚫 Доступ запрещён.")
         return
         
-    asyncio.create_task(reminder_loop(context.application))
+    # Запускаем в фоне без создания новой задачи
+    asyncio.get_event_loop().create_task(reminder_loop(context.application))
     await update.message.reply_text("🔔 Напоминания запущены!")
 
 # -------------------------------------------------------------------
@@ -762,7 +750,7 @@ async def show_top(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # MAIN
 # -------------------------------------------------------------------
-async def main():
+def main():
     # Загружаем данные при старте
     load_data()
     
@@ -779,27 +767,8 @@ async def main():
     app.add_handler(CommandHandler("profile", show_profile))
 
     # Обработчики callback'ов
-    app.add_handler(CallbackQueryHandler(inline_handler, pattern="^(wish|toast|admin_rooms|admin_wishes|admin_map|profile|mini_games|quest_menu|gift_idea|snowfall)$"))
+    app.add_handler(CallbackQueryHandler(inline_handler, pattern="^(wish|toast|admin_rooms|admin_wishes|admin_map|profile|mini_games|quest_menu|gift_idea|snowfall|back_menu)$"))
     app.add_handler(CallbackQueryHandler(quest_handler, pattern="^quest"))
     app.add_handler(CallbackQueryHandler(game_handler, pattern="^game"))
-    app.add_handler(CallbackQueryHandler(animated_snowfall_buttons, pattern="^snowfall_anim"))
+    app.add_handler(CallbackQueryHandler(grinch_battle, pattern="^game_grinch"))
     
-    # Обработчик текстовых сообщений
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
-
-    # Запускаем фоновые задачи
-    asyncio.create_task(reminder_loop(app))
-
-    print("🎄 Бот запущен на Replit! ❄️✨")
-    await app.run_polling()
-
-if __name__ == "__main__":
-    # Создаем файл данных если его нет
-    try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            pass
-    except FileNotFoundError:
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump({"rooms": {}, "users": {}}, f, indent=4, ensure_ascii=False)
-    
-    asyncio.run(main())
