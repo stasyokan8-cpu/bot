@@ -1,5 +1,5 @@
-# 🔥🎄 SUPER-DELUXE SECRET SANTA BOT v2.3 🎄🔥
-# ПОЛНАЯ ВЕРСИЯ: исправленные мини-игры, инструкции, удаление комнат
+# 🔥🎄 SUPER-DELUXE SECRET SANTA BOT v2.4 🎄🔥
+# ПОЛНАЯ ВЕРСИЯ: исправленные мини-игры, инструкции, удаление комнат + Replit оптимизация
 
 import json
 import random
@@ -15,11 +15,12 @@ from telegram.ext import (
     CallbackQueryHandler, ContextTypes, filters
 )
 
-TOKEN = "8299215190:AAEqLfMOTjywx_jOeT-Kv1I5oKdgbdWzN9Y"
+# Конфигурация для Replit
+TOKEN = os.environ.get("TELEGRAM_TOKEN", "8299215190:AAEqLfMOTjywx_jOeT-Kv1I5oKdgbdWzN9Y")
 ADMIN_USERNAME = "BeellyKid"
 DATA_FILE = "santa_data.json"
 
-print(f"🎄 Запуск Secret Santa Bot v2.3...")
+print(f"🎄 Запуск Secret Santa Bot v2.4 на Replit...")
 
 user_data = {}
 
@@ -369,6 +370,7 @@ async def join_room_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def join_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = load_data()
+    user = update.effective_user
     
     # Обработка команды /join_room
     if update.message and update.message.text.startswith('/join_room'):
@@ -378,7 +380,11 @@ async def join_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
         code = update.message.text.strip().upper()
         context.user_data["join_mode"] = False
     else:
-        return
+        # Если это просто текст, проверяем, не код ли комнаты
+        if update.message and len(update.message.text.strip()) == 6 and update.message.text.strip().startswith('R'):
+            code = update.message.text.strip().upper()
+        else:
+            return
 
     if not code:
         await update.message.reply_text("Напиши: /join_room RXXXXX")
@@ -963,7 +969,7 @@ async def show_battle_interface(update: Update, context: ContextTypes.DEFAULT_TY
     
     await update.callback_query.edit_message_text(battle_text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def battle_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def battle_action_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     
@@ -1039,6 +1045,9 @@ async def battle_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     
     await q.edit_message_text(result_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def battle_continue_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await show_battle_interface(update, context)
 
 async def battle_victory(update: Update, context: ContextTypes.DEFAULT_TYPE, battle_log):
     user = update.effective_user
@@ -1194,7 +1203,7 @@ async def ask_quiz_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-async def process_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def quiz_answer_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     
@@ -1224,7 +1233,7 @@ async def process_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-async def next_quiz_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def quiz_next_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
     
     context.user_data["quiz"]["current_question"] += 1
@@ -1435,6 +1444,16 @@ async def enhanced_quest_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+async def quest_start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    quest_id = update.callback_query.data.replace("quest_start_", "")
+    await update.callback_query.answer(f"Квест '{quest_id}' скоро будет добавлен!")
+    # Здесь будет логика квестов
+    admin = is_admin(update)
+    await update.callback_query.edit_message_text(
+        f"🏔️ Квест в разработке! Следи за обновлениями! 🎄",
+        reply_markup=enhanced_menu_keyboard(admin)
+    )
+
 # -------------------------------------------------------------------
 # 📢 РАЗДЕЛ: РАССЫЛКА ДЛЯ АДМИНА
 # -------------------------------------------------------------------
@@ -1474,6 +1493,14 @@ async def broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=keyboard
     )
 
+async def broadcast_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer("Функция рассылки в разработке!")
+    admin = is_admin(update)
+    await update.callback_query.edit_message_text(
+        "📢 Система рассылки скоро будет доступна!",
+        reply_markup=enhanced_menu_keyboard(admin)
+    )
+
 # -------------------------------------------------------------------
 # 🎄 ГЛАВНОЕ МЕНЮ
 # -------------------------------------------------------------------
@@ -1490,7 +1517,10 @@ def enhanced_menu_keyboard(admin=False):
         [InlineKeyboardButton("♟️ Шашки", callback_data="game_checkers"),
          InlineKeyboardButton("📋 Участники комнаты", callback_data="room_members")],
     ]
+    
+    # Добавляем кнопку создания комнаты для админа
     if admin:
+        base.append([InlineKeyboardButton("🏠 СОЗДАТЬ КОМНАТУ", callback_data="create_room_btn")])
         base.extend([
             [InlineKeyboardButton("🎄 Админ: Комнаты", callback_data="admin_rooms")],
             [InlineKeyboardButton("🚀 Админ: Запуск игры", callback_data="admin_start")],
@@ -1499,6 +1529,7 @@ def enhanced_menu_keyboard(admin=False):
             [InlineKeyboardButton("🔀 Админ: Кому кто", callback_data="admin_map")],
             [InlineKeyboardButton("📢 Админ: Рассылка", callback_data="broadcast_menu")],
         ])
+    
     base.append([InlineKeyboardButton("🎅 Присоединиться к комнате", callback_data="join_room_menu")])
     return InlineKeyboardMarkup(base)
 
@@ -1615,6 +1646,12 @@ async def enhanced_inline_handler(update: Update, context: ContextTypes.DEFAULT_
     elif q.data == "broadcast_menu":
         await broadcast_menu(update, context)
         
+    elif q.data == "create_room_btn":
+        if not is_admin(update):
+            await q.answer("🚫 Только администратор может создавать комнаты!", show_alert=True)
+            return
+        await create_room(update, context)
+        
     elif q.data == "back_menu":
         admin = is_admin(update)
         await q.edit_message_text(
@@ -1644,16 +1681,50 @@ async def animated_snowfall_buttons(update: Update, context: ContextTypes.DEFAUL
     )
 
 async def snowfall(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❄️ Запускаю снегопад...")
-    flakes = ["❄️", "✨", "☃️", "❅"]
-    for _ in range(12):
-        await asyncio.sleep(0.4)
-        row = "".join(random.choice(flakes) for _ in range(20))
-        await update.message.reply_text(row)
+    user = update.effective_user
+    
+    # Создаем начальное сообщение
+    message = await update.message.reply_text("❄️ Запускаю волшебный снегопад...")
+    
+    frames = ["❄️", "✨", "❅", "☃️", "🎄", "🌟", "💫", "⭐"]
+    snow_effects = [
+        "❄️✨❄️✨❄️✨❄️✨",
+        "✨❄️✨❄️✨❄️✨❄️", 
+        "❅🌟❅🌟❅🌟❅🌟",
+        "☃️💫☃️💫☃️💫☃️💫",
+        "🎄⭐🎄⭐🎄⭐🎄⭐",
+        "✨❄️❅☃️✨❄️❅☃️",
+        "🌟💫⭐🌟💫⭐🌟💫"
+    ]
+    
+    # Анимация снегопада
+    for i in range(10):
+        snow_frame = random.choice(snow_effects)
+        text = f"❄️ <b>Волшебный снегопад</b> ❄️\n\n{snow_frame}\n\n"
+        
+        # Добавляем прогресс
+        progress = "🔴" * i + "⚪" * (10 - i)
+        text += f"Снегопад: {progress}"
+        
+        try:
+            await message.edit_text(text, parse_mode='HTML')
+            await asyncio.sleep(0.5)
+        except:
+            break
+    
+    # Финальное сообщение
+    add_santa_points(user.id, 10, context)
+    await message.edit_text(
+        f"❄️ <b>Снегопад завершён!</b> ❄️\n\n"
+        f"✨ Волшебство наполнило воздух!\n"
+        f"🎁 +10 очков Санты за настроение!\n\n"
+        f"Продолжаем праздник! 🎄",
+        parse_mode='HTML'
+    )
     
     admin = is_admin(update)
     await update.message.reply_text(
-        "❄️ Снегопад завершён! Волшебство продолжается...",
+        "Выбери следующее действие:",
         reply_markup=enhanced_menu_keyboard(admin)
     )
 
@@ -1671,6 +1742,16 @@ async def points(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 🚀 ОСНОВНОЙ ЗАПУСК
 # -------------------------------------------------------------------
 def main():
+    # Инициализация данных
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            pass
+        print("📁 Файл данных найден")
+    except FileNotFoundError:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump({"rooms": {}, "users": {}}, f, indent=4, ensure_ascii=False)
+        print("📁 Создан новый файл данных")
+    
     load_data()
     
     app = Application.builder().token(TOKEN).build()
@@ -1687,17 +1768,25 @@ def main():
     app.add_handler(CommandHandler("points", points))
 
     # Обработчики callback'ов - ВАЖНО: правильный порядок!
-    app.add_handler(CallbackQueryHandler(game_handlers, pattern="^(game_|coin_|battle_|quiz_)"))
+    app.add_handler(CallbackQueryHandler(game_handlers, pattern="^(game_|coin_|battle_start|quiz_start)"))
     app.add_handler(CallbackQueryHandler(guess_handler, pattern="^guess_"))
+    app.add_handler(CallbackQueryHandler(quiz_answer_handler, pattern="^quiz_answer_"))
+    app.add_handler(CallbackQueryHandler(quiz_next_handler, pattern="^quiz_next$"))
+    app.add_handler(CallbackQueryHandler(battle_action_handler, pattern="^battle_"))
+    app.add_handler(CallbackQueryHandler(battle_continue_handler, pattern="^battle_continue$"))
+    app.add_handler(CallbackQueryHandler(quest_start_handler, pattern="^quest_start_"))
+    app.add_handler(CallbackQueryHandler(broadcast_handler, pattern="^broadcast_"))
     app.add_handler(CallbackQueryHandler(enhanced_inline_handler))
 
     # Обработчик текстовых сообщений
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, join_room))
 
-    print("🎄 Бот v2.3 запускается...")
-    print("✨ Исправленные мини-игры + инструкции + удаление комнат!")
+    print("🎄 Бот v2.4 запускается на Replit...")
+    print("✨ ВСЕ кнопки исправлены + улучшен снегопад + кнопка создания комнаты!")
+    print("🔧 Оптимизировано для Replit")
     
+    # Запуск бота с обработкой ошибок для Replit
     try:
         app.run_polling(
             allowed_updates=Update.ALL_TYPES,
@@ -1708,15 +1797,11 @@ def main():
         print("\n🛑 Бот остановлен")
     except Exception as e:
         print(f"❌ Критическая ошибка: {e}")
+        # Для Replit - перезапуск при ошибке
+        print("🔄 Перезапуск через 5 секунд...")
+        import time
+        time.sleep(5)
+        main()
 
 if __name__ == "__main__":
-    try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            pass
-        print("📁 Файл данных найден")
-    except FileNotFoundError:
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump({"rooms": {}, "users": {}}, f, indent=4, ensure_ascii=False)
-        print("📁 Создан новый файл данных")
-    
     main()
