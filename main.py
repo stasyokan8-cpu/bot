@@ -1633,15 +1633,13 @@ async def enhanced_quest_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
         )])
     
     keyboard.append([InlineKeyboardButton("📊 Мои достижения", callback_data="quest_achievements")])
-    keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="back_menu")])
+    keyboard.append([InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_menu")])  # ИЗМЕНЕНО: правильный callback_data
     
     await update.callback_query.edit_message_text(
         quests_info,
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-
-# 🎯 Квест: Поиск замерзших рун (многошаговый)
 async def quest_frozen_runes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -1788,7 +1786,70 @@ async def quest_grinch_castle(update: Update, context: ContextTypes.DEFAULT_TYPE
     ]
     
     await q.edit_message_text(story, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+async def admin_user_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        await update.callback_query.answer("🚫 Доступ запрещён", show_alert=True)
+        return
+        
+    q = update.callback_query
+    await q.answer()
+    
+    # Получаем ID пользователя из контекста или запрашиваем
+    if "admin_selected_user" in context.user_data:
+        user_id = context.user_data["admin_selected_user"]
+        user_info = user_data.get(str(user_id), {})
+        
+        stats_text = f"""
+📊 <b>Детальная статистика пользователя</b>
 
+👤 <b>Информация:</b>
+• Имя: {user_info.get('name', 'Неизвестно')}
+• Username: @{user_info.get('username', 'без username')}
+• ID: {user_id}
+
+🎮 <b>Статистика шашек:</b>
+• Побед: {user_info.get('checkers_wins', 0)}
+• Поражений: {user_info.get('checkers_losses', 0)}
+• Всего игр: {user_info.get('checkers_wins', 0) + user_info.get('checkers_losses', 0)}
+• Последняя победа: {user_info.get('last_checkers_win', 'Никогда')}
+
+📈 <b>Общая статистика:</b>
+• Очки Санты: {user_info.get('santa_points', 0)}
+• Уровень оленя: {user_info.get('reindeer_level', 0)}
+• Побед в играх: {user_info.get('games_won', 0)}
+• Побед над Гринчем: {user_info.get('grinch_wins', 0)}
+• Пройдено квестов: {user_info.get('quests_finished', 0)}
+"""
+
+        await q.edit_message_text(
+            stats_text,
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📊 Общая статистика шашек", callback_data="admin_checkers_stats")],
+                [InlineKeyboardButton("⬅️ В админ-меню", callback_data="back_menu")]
+            ])
+        )
+    else:
+        # Показать список пользователей для выбора
+        await show_user_selection(update, context)
+
+async def show_user_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    keyboard = []
+    for user_id, data in user_data.items():
+        if data.get("checkers_wins", 0) > 0 or data.get("checkers_losses", 0) > 0:
+            btn_text = f"{data.get('name', 'User')} ({data.get('checkers_wins', 0)} побед)"
+            keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"admin_select_user_{user_id}")])
+    
+    keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="admin_checkers_stats")])
+    
+    await q.edit_message_text(
+        "👥 <b>Выберите пользователя для детальной статистики:</b>",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 # Обработчик старта квестов
 async def quest_start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -1987,11 +2048,11 @@ async def quest_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         add_reindeer_exp(user.id, exp_earned)
     
     # Показываем результат
-    keyboard = []
-    if active_quest and "complete" not in action and "escape" not in action:
-        keyboard.append([InlineKeyboardButton("🔄 Продолжить квест", callback_data=f"quest_start_{active_quest}")])
-    keyboard.append([InlineKeyboardButton("🏔️ Выбрать другой квест", callback_data="quest_menu")])
-    keyboard.append([InlineKeyboardButton("⬅️ В меню", callback_data="back_menu")])
+keyboard = []
+if active_quest and "complete" not in action and "escape" not in action:
+    keyboard.append([InlineKeyboardButton("🔄 Продолжить квест", callback_data=f"quest_start_{active_quest}")])
+keyboard.append([InlineKeyboardButton("🏔️ Выбрать другой квест", callback_data="quest_menu")])
+keyboard.append([InlineKeyboardButton("⬅️ В меню", callback_data="back_menu")])  # ИСПРАВЛЕНО
     
     await q.edit_message_text(
         f"🏔️ <b>Результат:</b>\n\n{result}",
@@ -2360,6 +2421,100 @@ async def checkers_confirm_loss(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 async def checkers_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def admin_checkers_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        await update.callback_query.answer("🚫 Доступ запрещён", show_alert=True)
+        return
+        
+    q = update.callback_query
+    await q.answer()
+    
+    # Собираем статистику всех пользователей по шашкам
+    stats_data = []
+    total_wins = 0
+    total_losses = 0
+    total_games = 0
+    
+    for user_id, data in user_data.items():
+        wins = data.get("checkers_wins", 0)
+        losses = data.get("checkers_losses", 0)
+        user_games = wins + losses
+        
+        if user_games > 0:  # Показываем только тех, кто играл
+            win_rate = (wins / user_games * 100) if user_games > 0 else 0
+            stats_data.append({
+                "name": data.get("name", f"User {user_id}"),
+                "username": data.get("username", "без username"),
+                "wins": wins,
+                "losses": losses,
+                "total_games": user_games,
+                "win_rate": win_rate,
+                "last_win": data.get("last_checkers_win")
+            })
+            
+            total_wins += wins
+            total_losses += losses
+            total_games += user_games
+    
+    # Сортируем по количеству побед
+    stats_data.sort(key=lambda x: x["wins"], reverse=True)
+    
+    stats_text = f"""
+📊 <b>АДМИН СТАТИСТИКА: ШАШКИ</b>
+
+📈 <b>Общая статистика:</b>
+• Всего игр: {total_games}
+• Побед: {total_wins}
+• Поражений: {total_losses}
+• Процент побед: {(total_wins/total_games*100) if total_games > 0 else 0:.1f}%
+
+👥 <b>Статистика по игрокам:</b>
+"""
+    
+    if not stats_data:
+        stats_text += "\n❌ Пока никто не играл в шашки"
+    else:
+        medals = ["🥇", "🥈", "🥉"]
+        for i, player in enumerate(stats_data[:15]):  # Показываем топ-15
+            if i < 3:
+                medal = medals[i]
+            else:
+                medal = f"{i+1}."
+            
+            last_win_info = ""
+            if player["last_win"]:
+                last_time = datetime.fromisoformat(player["last_win"])
+                time_diff = datetime.now(timezone.utc) - last_time
+                if time_diff < timedelta(hours=24):
+                    last_win_info = f" (🕐 {int(time_diff.total_seconds() // 3600)}ч назад)"
+            
+            stats_text += f"\n{medal} <b>{player['name']}</b> (@{player['username']})"
+            stats_text += f"\n   🎮 {player['wins']}✅/{player['losses']}❌"
+            stats_text += f" ({player['win_rate']:.1f}%){last_win_info}"
+    
+    # Добавляем информацию о возможных нарушениях
+    suspicious_players = []
+    for player in stats_data:
+        if player["last_win"]:
+            last_time = datetime.fromisoformat(player["last_win"])
+            time_diff = datetime.now(timezone.utc) - last_time
+            # Если много побед за короткое время - подозрительно
+            if player["wins"] > 5 and time_diff < timedelta(hours=2):
+                suspicious_players.append(player)
+    
+    if suspicious_players:
+        stats_text += f"\n\n⚠️ <b>Подозрительная активность:</b>"
+        for player in suspicious_players[:5]:
+            stats_text += f"\n• {player['name']} - {player['wins']} побед за короткое время"
+    
+    await q.edit_message_text(
+        stats_text,
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Обновить", callback_data="admin_checkers_stats")],
+            [InlineKeyboardButton("⬅️ В админ-меню", callback_data="back_menu")]
+        ])
+    )
     q = update.callback_query
     await q.answer()
     
@@ -2433,7 +2588,35 @@ def enhanced_menu_keyboard(admin=False):
     
     base.append([InlineKeyboardButton("🎅 Присоединиться к комнате", callback_data="join_room_menu")])
     return InlineKeyboardMarkup(base)
-
+def enhanced_menu_keyboard(admin=False):
+    base = [
+        [InlineKeyboardButton("🎁 Ввести пожелание", callback_data="wish"),
+         InlineKeyboardButton("✨ Тост дня", callback_data="toast")],
+        [InlineKeyboardButton("🎮 Мини-игры", callback_data="mini_games"),
+         InlineKeyboardButton("❄️ Снегопад", callback_data="snowfall")],
+        [InlineKeyboardButton("🎁 Идея подарка", callback_data="gift_idea"),
+         InlineKeyboardButton("🏔️ Эпичные квесты", callback_data="quest_menu")],
+        [InlineKeyboardButton("👤 Профиль", callback_data="profile"),
+         InlineKeyboardButton("🏆 Топ игроков", callback_data="top_players")],
+        [InlineKeyboardButton("♟️ Шашки", callback_data="game_checkers"),
+         InlineKeyboardButton("📋 Участники комнаты", callback_data="room_members")],
+    ]
+    
+    # Добавляем кнопку создания комнаты для админа
+    if admin:
+        base.append([InlineKeyboardButton("🏠 СОЗДАТЬ КОМНАТУ", callback_data="create_room_btn")])
+        base.extend([
+            [InlineKeyboardButton("🎄 Админ: Комнаты", callback_data="admin_rooms")],
+            [InlineKeyboardButton("🚀 Админ: Запуск игры", callback_data="admin_start")],
+            [InlineKeyboardButton("🗑️ Админ: Удалить комнату", callback_data="admin_delete")],
+            [InlineKeyboardButton("📜 Админ: Пожелания", callback_data="admin_wishes")],
+            [InlineKeyboardButton("🔀 Админ: Кому кто", callback_data="admin_map")],
+            [InlineKeyboardButton("📊 Админ: Статистика шашек", callback_data="admin_checkers_stats")],  # ДОБАВЛЕНО
+            [InlineKeyboardButton("📢 Админ: Рассылка", callback_data="broadcast_menu")],
+        ])
+    
+    base.append([InlineKeyboardButton("🎅 Присоединиться к комнате", callback_data="join_room_menu")])
+    return InlineKeyboardMarkup(base)
 # -------------------------------------------------------------------
 # 🔄 ГЛАВНЫЙ ОБРАБОТЧИК CALLBACK'ОВ
 # -------------------------------------------------------------------
@@ -2503,7 +2686,8 @@ async def enhanced_inline_handler(update: Update, context: ContextTypes.DEFAULT_
                 parse_mode='HTML',
                 reply_markup=back_to_menu_keyboard(True)
             )
-
+        elif q.data == "admin_checkers_stats":
+                await admin_checkers_stats(update, context)
         elif q.data == "admin_map":
             if not is_admin(update): 
                 await q.answer("🚫 Только администратор может просматривать распределение", show_alert=True)
@@ -2561,6 +2745,10 @@ async def enhanced_inline_handler(update: Update, context: ContextTypes.DEFAULT_
             
         elif q.data == "broadcast_menu":
             await broadcast_menu(update, context)
+        elif q.data.startswith("admin_select_user_"):
+            user_id = q.data.replace("admin_select_user_", "")
+            context.user_data["admin_selected_user"] = user_id
+            await admin_user_stats(update, context)
             
         elif q.data == "broadcast_all":
             await broadcast_all_users(update, context)
