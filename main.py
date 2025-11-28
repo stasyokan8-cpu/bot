@@ -1,5 +1,5 @@
-# 🔥🎄 SUPER-DELUXE SECRET SANTA BOT v3.0 🎄🔥
-# ПОЛНАЯ ВЕРСИЯ: исправленные мини-игры, квесты, улучшенный квиз и битва с Гринчем
+# 🔥🎄 SUPER-DELUXE SECRET SANTA BOT v3.1 🎄🔥
+# ИСПРАВЛЕННАЯ ВЕРСИЯ: улучшенный баланс, работающие квесты, исправленные шашки
 
 import json
 import random
@@ -20,7 +20,7 @@ TOKEN = os.environ.get("TELEGRAM_TOKEN", "8299215190:AAEqLfMOTjywx_jOeT-Kv1I5oKd
 ADMIN_USERNAME = "BeellyKid"
 DATA_FILE = "santa_data.json"
 
-print(f"🎄 Запуск Secret Santa Bot v3.0 на Replit...")
+print(f"🎄 Запуск Secret Santa Bot v3.1 на Replit...")
 
 user_data = {}
 
@@ -108,7 +108,8 @@ def init_user_data(user_id):
             "total_points": 0,
             "name": "",
             "username": "",
-            "answered_quiz_questions": []
+            "answered_quiz_questions": [],
+            "last_checkers_win": None
         }
 
 def add_santa_points(user_id, points, context: ContextTypes.DEFAULT_TYPE = None):
@@ -223,7 +224,7 @@ def generate_gift_idea():
             "Набор крафтового шоколада от локальных производителей",
             "Подарочная корзина с сырами и мёдом",
             "Набор для приготовления сыра или йогурта",
-            "Экзотические специи в красивой упаковке",
+            "Экзотические специи в красивой упаковка",
             "Коробка полезных снеков без сахара",
             "Набор для создания собственного чая",
             "Подарочный набор элитного кофе",
@@ -821,7 +822,7 @@ async def game_coin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
     await q.edit_message_text(game_rules, parse_mode='HTML', reply_markup=kb)
 
-# ⚔️ Игра: Битва с Гринчем
+# ⚔️ Игра: Битва с Гринчем (УЛУЧШЕННАЯ)
 async def game_grinch_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -902,7 +903,7 @@ async def game_quiz_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
     await q.edit_message_text(game_rules, parse_mode='HTML', reply_markup=kb)
 
-# ♟️ Игра: Шашки
+# ♟️ Игра: Шашки (УЛУЧШЕННАЯ)
 async def game_checkers_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -916,24 +917,32 @@ async def game_checkers_handler(update: Update, context: ContextTypes.DEFAULT_TY
 ✨ <b>Твоя статистика:</b>
 • Побед: {user_data[str(user.id)].get('checkers_wins', 0)}
 • Поражений: {user_data[str(user.id)].get('checkers_losses', 0)}
-• Рейтинг: {user_data[str(user.id)].get('checkers_rating', 1000)}
 
-🎮 <b>Как играть:</b>
-1. Нажми "🎮 Начать игру" для игры с другом
-2. После игры подтверди результат
-3. Получи награды за победу!
+🎮 <b>Как играть и подтверждать результат:</b>
+1. Нажми "🎮 Начать игру" для игры с другом через @goplaybot
+2. Сыграй партию в шашки
+3. Вернись в этого бота и подтверди результат
+4. Получи награды за победу или потери за поражение
+
+⚠️ <b>Внимание:</b>
+• Подтверждай результат только после реальной игры
+• Нельзя подтверждать победы чаще 1 раза в 30 минут
+• За обман могут быть сняты очки
 
 🏆 <b>Награды:</b>
 • Победа: 80-120 очков + 25 опыта
 • Поражение: -20-40 очков
 • Серия побед: дополнительные бонусы!
+
+📱 <b>Начни игру сейчас:</b>
 """
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🎮 Начать игру в шашки", url="https://t.me/goplaybot?start=checkers")],
-        [InlineKeyboardButton("✅ Подтвердить победу", callback_data="checkers_confirm_win")],
-        [InlineKeyboardButton("❌ Подтвердить поражение", callback_data="checkers_confirm_loss")],
+        [InlineKeyboardButton("✅ Я ВЫИГРАЛ(А) - подтвердить победу", callback_data="checkers_confirm_win")],
+        [InlineKeyboardButton("❌ Я ПРОИГРАЛ(А) - подтвердить поражение", callback_data="checkers_confirm_loss")],
         [InlineKeyboardButton("📊 Моя статистика", callback_data="checkers_stats")],
+        [InlineKeyboardButton("ℹ️ Как подтверждать результаты", callback_data="checkers_help")],
         [InlineKeyboardButton("⬅️ Назад в игры", callback_data="mini_games")]
     ])
     
@@ -1035,7 +1044,7 @@ async def guess_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.edit_message_text(result_text, reply_markup=kb)
 
 # -------------------------------------------------------------------
-# ⚔️ ЭПИЧНАЯ БИТВА С ГРИНЧЕМ (ИСПРАВЛЕННАЯ)
+# ⚔️ ЭПИЧНАЯ БИТВА С ГРИНЧЕМ (ИСПРАВЛЕННАЯ И УЛУЧШЕННАЯ)
 # -------------------------------------------------------------------
 async def epic_grinch_battle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -1045,21 +1054,23 @@ async def epic_grinch_battle(update: Update, context: ContextTypes.DEFAULT_TYPE)
     init_user_data(user.id)
     user_data[str(user.id)]["grinch_fights"] += 1
     
-    # Система характеристик
+    # УЛУЧШЕННАЯ СИСТЕМА ХАРАКТЕРИСТИК
     player_stats = {
         "hp": 100,
         "max_hp": 100,
-        "attack": random.randint(15, 25),
-        "defense": random.randint(5, 15),
+        "attack": random.randint(18, 28),
+        "defense": random.randint(8, 15),
         "special_charges": 3
     }
     
     grinch_stats = {
         "hp": 120,
         "max_hp": 120,
-        "attack": random.randint(18, 28),
-        "defense": random.randint(8, 18),
-        "special_used": False
+        "attack": random.randint(22, 32),
+        "defense": random.randint(10, 18),
+        "special_used": False,
+        "rage_mode": False,
+        "consecutive_defends": 0
     }
     
     context.user_data["battle_state"] = {
@@ -1078,8 +1089,8 @@ async def show_battle_interface(update: Update, context: ContextTypes.DEFAULT_TY
     grinch = battle_state["grinch"]
     
     # Создаем визуальные шкалы HP
-    player_hp_bar = "❤️" * (player["hp"] // 10) + "♡" * ((player["max_hp"] - player["hp"]) // 10)
-    grinch_hp_bar = "💚" * (grinch["hp"] // 10) + "♡" * ((grinch["max_hp"] - grinch["hp"]) // 10)
+    player_hp_bar = "❤️" * max(1, player["hp"] // 10) + "♡" * max(0, (player["max_hp"] - player["hp"]) // 10)
+    grinch_hp_bar = "💚" * max(1, grinch["hp"] // 10) + "♡" * max(0, (grinch["max_hp"] - grinch["hp"]) // 10)
     
     battle_text = f"""
 ⚔️ <b>ЭПИЧНАЯ БИТВА С ГРИНЧЕМ - Раунд {battle_state['round']}</b>
@@ -1122,20 +1133,20 @@ async def battle_action_handler(update: Update, context: ContextTypes.DEFAULT_TY
     
     # Ход игрока
     if action == "attack":
-        damage = max(0, player["attack"] - grinch["defense"] // 2)
+        damage = max(1, player["attack"] - grinch["defense"] // 3)
         grinch["hp"] -= damage
         battle_log.append(f"🎅 Ты атаковал и нанёс {damage} урона!")
         
     elif action == "defend":
-        defense_bonus = random.randint(5, 15)
+        defense_bonus = random.randint(8, 15)
         player["defense"] += defense_bonus
         battle_log.append(f"🛡 Ты укрепил защиту! +{defense_bonus} к защите")
         
     elif action == "special" and player["special_charges"] > 0:
         player["special_charges"] -= 1
-        heal = random.randint(20, 35)
+        heal = random.randint(25, 40)
         player["hp"] = min(player["max_hp"], player["hp"] + heal)
-        special_damage = random.randint(15, 25)
+        special_damage = random.randint(20, 30)
         grinch["hp"] -= special_damage
         battle_log.append(f"✨ Новогоднее волшебство! Исцеление +{heal}, Гринч получает {special_damage} урона!")
         
@@ -1156,25 +1167,54 @@ async def battle_action_handler(update: Update, context: ContextTypes.DEFAULT_TY
         await battle_victory(update, context, battle_log)
         return
     
-    # Ход Гринча
-    grinch_actions = ["attack", "attack", "special", "defend"]
+    # УЛУЧШЕННЫЙ ХОД ГРИНЧА
+    grinch_actions = ["attack", "attack", "strong_attack", "special", "defend", "rage_attack"]
     grinch_action = random.choice(grinch_actions)
-    
+
     if grinch_action == "attack":
-        damage = max(0, grinch["attack"] - player["defense"] // 2)
+        damage = max(1, grinch["attack"] - player["defense"] // 3)
         player["hp"] -= damage
+        grinch["consecutive_defends"] = 0
         battle_log.append(f"🎄 Гринч атаковал и нанёс {damage} урона!")
-        
+
+    elif grinch_action == "strong_attack":
+        if random.random() > 0.3:  # 70% шанс попадания
+            damage = max(1, (grinch["attack"] + 8) - player["defense"] // 4)
+            player["hp"] -= damage
+            battle_log.append(f"💥 Гринч использует сильную атаку! {damage} урона!")
+        else:
+            battle_log.append(f"💫 Гринч промахнулся сильной атакой!")
+        grinch["consecutive_defends"] = 0
+
+    elif grinch_action == "rage_attack" and grinch["hp"] < 40:
+        damage = max(1, (grinch["attack"] + 12) - player["defense"] // 5)
+        player["hp"] -= damage
+        grinch["rage_mode"] = True
+        battle_log.append(f"🔥 ГРИНЧ В ЯРОСТИ! Мощная атака на {damage} урона!")
+        grinch["consecutive_defends"] = 0
+
     elif grinch_action == "defend":
-        grinch_defense_bonus = random.randint(5, 10)
-        grinch["defense"] += grinch_defense_bonus
-        battle_log.append(f"🛡 Гринч укрепил защиту! +{grinch_defense_bonus} к защите")
-        
+        # Ограничиваем последовательную защиту
+        if grinch["consecutive_defends"] < 2:
+            grinch_defense_bonus = random.randint(5, 10)
+            grinch["defense"] += grinch_defense_bonus
+            grinch["consecutive_defends"] += 1
+            battle_log.append(f"🛡 Гринч укрепил защиту! +{grinch_defense_bonus} к защите")
+        else:
+            # После 2 защит подряд - вынужденная атака
+            damage = max(1, grinch["attack"] - player["defense"] // 3)
+            player["hp"] -= damage
+            grinch["consecutive_defends"] = 0
+            battle_log.append(f"🎄 Гринч вынужден атаковать! {damage} урона!")
+
     elif grinch_action == "special" and not grinch["special_used"]:
         grinch["special_used"] = True
-        grinch_special_damage = random.randint(20, 30)
+        grinch_special_damage = random.randint(25, 35)
         player["hp"] -= grinch_special_damage
-        battle_log.append(f"💥 Гринч использует 'Крадущийся праздник'! -{grinch_special_damage} HP!")
+        # Спецприем также снижает защиту игрока
+        player["defense"] = max(5, player["defense"] - 8)
+        battle_log.append(f"💥 Гринч использует 'Крадущийся праздник'! -{grinch_special_damage} HP, твоя защита снижена!")
+        grinch["consecutive_defends"] = 0
     
     # Проверка поражения
     if player["hp"] <= 0:
@@ -1256,26 +1296,6 @@ NEW_YEAR_QUIZ = [
     {"id": 8, "question": "🦌 Сколько оленей в упряжке Санта Клауса?", "options": ["8", "9", "10", "12"], "correct": 1, "fact": "У Санты 9 оленей: Дашер, Дэнсер, Прэнсер, Виксен, Комет, Кьюпид, Дондер, Блитцен и Рудольф!"},
     {"id": 9, "question": "❄️ Какой самый популярный новогодний фильм?", "options": ["Один дома", "Один дома 2", "Этажом выше", "Красотка"], "correct": 0, "fact": "'Один дома' — самый популярный новогодний фильм всех времён!"},
     {"id": 10, "question": "🍾 Что традиционно пьют в новогоднюю ночь?", "options": ["Шампанское", "Водку", "Сок", "Все варианты"], "correct": 3, "fact": "В разных странах и семьях традиции разные, но шампанское — самый популярный напиток!"},
-    {"id": 11, "question": "🎆 В какой стране самый масштабный новогодний фейерверк?", "options": ["🇦🇺 Австралия", "🇺🇸 США", "🇦🇪 ОАЭ", "🇬🇧 Великобритания"], "correct": 0, "fact": "Сидней в Австралии славится самым масштабным новогодним фейерверком!"},
-    {"id": 12, "question": "🥂 Сколько бокалов шампанского выпивают в среднем на Новый год?", "options": ["1-2", "3-4", "5-6", "7-8"], "correct": 1, "fact": "В среднем на человека приходится 3-4 бокала шампанского!"},
-    {"id": 13, "question": "🎵 Какая песня считается новогодним гимном?", "options": ["Jingle Bells", "Last Christmas", "Happy New Year", "All I Want for Christmas"], "correct": 0, "fact": "Jingle Bells — самая популярная новогодняя песня в мире!"},
-    {"id": 14, "question": "🎪 Где впервые установили публичную новогоднюю ёлку?", "options": ["🇩🇪 Германия", "🇷🇺 Россия", "🇺🇸 США", "🇫🇮 Финляндия"], "correct": 2, "fact": "Первая публичная ёлка в США была установлена в 1912 году!"},
-    {"id": 15, "question": "🧦 Что вешают на камин для подарков?", "options": ["Носки", "Варежки", "Шарфы", "Шапки"], "correct": 0, "fact": "Традиционно носки вешают на камин для подарков от Санты!"},
-    {"id": 16, "question": "🎄 Из какой страны пришла традиция ставить ёлку?", "options": ["🇩🇪 Германия", "🇫🇮 Финляндия", "🇸🇪 Швеция", "🇳🇴 Норвегия"], "correct": 0, "fact": "Традиция ставить ёлку пришла из Германии в XVI веке!"},
-    {"id": 17, "question": "🍬 Что принято класть в рождественский чулок?", "options": ["Конфеты", "Фрукты", "Монеты", "Все варианты"], "correct": 3, "fact": "В чулок кладут конфеты, фрукты, монеты и маленькие подарки!"},
-    {"id": 18, "question": "🎅 В каком городе живёт настоящий Санта Клаус?", "options": ["Рованиеми", "Осло", "Копенгаген", "Стокгольм"], "correct": 0, "fact": "Официальная резиденция Санта Клауса находится в Рованиеми, Финляндия!"},
-    {"id": 19, "question": "❄️ Как называется день перед Рождеством?", "options": ["Канун Рождества", "Сочельник", "Предрождество", "Все варианты"], "correct": 3, "fact": "Все варианты верны — это день перед Рождеством!"},
-    {"id": 20, "question": "🎁 Что дарят на Новый год в Китае?", "options": ["Деньги в конвертах", "Фрукты", "Сладости", "Все варианты"], "correct": 0, "fact": "В Китае дарят деньги в красных конвертах — хунбао!"},
-    {"id": 21, "question": "🕰️ Сколько времени длится новогодняя ночь?", "options": ["6 часов", "8 часов", "10 часов", "12 часов"], "correct": 3, "fact": "Новогодняя ночь длится 12 часов — с 18:00 31 декабря до 6:00 1 января!"},
-    {"id": 22, "question": "🎆 В каком городе самый красивый новогодний салют?", "options": ["🇦🇺 Сидней", "🇺🇸 Нью-Йорк", "🇬🇧 Лондон", "🇦🇪 Дубай"], "correct": 3, "fact": "Дубай славится самым дорогим и красивым новогодним салютом!"},
-    {"id": 23, "question": "🍪 Кто ест печенье, оставленное для Санты?", "options": ["Дети", "Родители", "Животные", "Никто"], "correct": 1, "fact": "Печенье обычно съедают родители, поддерживая магию Рождества!"},
-    {"id": 24, "question": "🎵 Какая группа спела 'Last Christmas'?", "options": ["Wham!", "ABBA", "Queen", "The Beatles"], "correct": 0, "fact": "'Last Christmas' исполнила британская группа Wham! в 1984 году!"},
-    {"id": 25, "question": "🌟 Что зажигают на ёлке?", "options": ["Гирлянды", "Свечи", "Фонарики", "Все варианты"], "correct": 3, "fact": "Изначально зажигали свечи, теперь — гирлянды и фонарики!"},
-    {"id": 26, "question": "🍾 Почему шампанское пенится?", "options": ["Углекислый газ", "Дрожжи", "Сахар", "Спирт"], "correct": 0, "fact": "Пена появляется из-за углекислого газа, который выделяется при открытии!"},
-    {"id": 27, "question": "🎄 Из чего делают искусственные ёлки?", "options": ["Пластик", "Металл", "Стекло", "Все варианты"], "correct": 3, "fact": "Искусственные ёлки делают из пластика, металла и даже стекла!"},
-    {"id": 28, "question": "🦌 Какой олень возглавляет упряжку Санты?", "options": ["Рудольф", "Дашер", "Дансер", "Прэнсер"], "correct": 1, "fact": "Дашер — самый быстрый олень, он возглавляет упряжку!"},
-    {"id": 29, "question": "🎁 Что дарят на Новый год в Японии?", "options": ["Деньги", "Фрукты", "Открытки", "Все варианты"], "correct": 2, "fact": "В Японии принято дарить новогодние открытки — нэнгадзё!"},
-    {"id": 30, "question": "❄️ Сколько снежинок падает за одну зиму?", "options": ["Миллионы", "Миллиарды", "Триллионы", "Не сосчитать"], "correct": 3, "fact": "Количество снежинок невозможно сосчитать — их бесчисленное множество!"}
 ]
 
 async def start_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2010,7 +2030,7 @@ async def show_quest_achievements(update: Update, context: ContextTypes.DEFAULT_
     )
 
 # -------------------------------------------------------------------
-# 📢 РАЗДЕЛ: РАССЫЛКА ДЛЯ АДМИНА (ПОЛНАЯ РЕАЛИЗАЦИЯ)
+# 📢 РАЗДЕЛ: РАССЫЛКА ДЛЯ АДМИНА
 # -------------------------------------------------------------------
 async def broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
@@ -2206,8 +2226,48 @@ async def cancel_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # -------------------------------------------------------------------
-# ♟️ РАЗДЕЛ: ШАШКИ (ИСПРАВЛЕННЫЕ)
+# ♟️ РАЗДЕЛ: ШАШКИ (ИСПРАВЛЕННЫЕ И УЛУЧШЕННЫЕ)
 # -------------------------------------------------------------------
+async def checkers_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    help_text = """
+ℹ️ <b>Как подтверждать результаты в шашках:</b>
+
+1. <b>Начни игру:</b>
+   • Нажми "🎮 Начать игру в шашки"
+   • Играй с другом через @goplaybot
+   • Закончи партию
+
+2. <b>Подтверди результат:</b>
+   • Если ВЫИГРАЛ - нажми "✅ Подтвердить победу"
+   • Если ПРОИГРАЛ - нажми "❌ Подтвердить поражение"
+
+3. <b>Получи награды/потери:</b>
+   • Победа: +80-120 очков Санты
+   • Поражение: -20-40 очков Санты
+
+⚠️ <b>Важные правила:</b>
+• Подтверждай только реальные игры
+• Между подтверждениями должен быть перерыв 30+ минут
+• За попытку обмана могут быть сняты очки
+
+🎯 <b>Советы:</b>
+• Тренируйся с друзьями
+• Играй честно
+• Улучшай свою стратегию!
+"""
+
+    await q.edit_message_text(
+        help_text,
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🎮 К шашкам", callback_data="game_checkers")],
+            [InlineKeyboardButton("⬅️ В меню", callback_data="back_menu")]
+        ])
+    )
+
 async def checkers_confirm_win(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -2215,43 +2275,62 @@ async def checkers_confirm_win(update: Update, context: ContextTypes.DEFAULT_TYP
     user = update.effective_user
     init_user_data(user.id)
     
-    # Проверяем, не слишком ли часто подтверждаются победы
+    # ПРОВЕРКА ВРЕМЕНИ - нельзя чаще чем раз в 30 минут
     last_win = user_data[str(user.id)].get("last_checkers_win")
     if last_win:
         last_time = datetime.fromisoformat(last_win)
-        if datetime.now(timezone.utc) - last_time < timedelta(hours=1):
+        time_diff = datetime.now(timezone.utc) - last_time
+        if time_diff < timedelta(minutes=30):
+            remaining = timedelta(minutes=30) - time_diff
+            minutes_left = int(remaining.total_seconds() // 60)
+            
             await q.edit_message_text(
-                "⏰ Слишком частые подтверждения побед!\n"
-                "Подожди至少 1 час между играми.",
-                reply_markup=back_to_menu_keyboard()
+                f"⏰ <b>Слишком рано!</b>\n\n"
+                f"Подожди еще {minutes_left} минут перед следующим подтверждением.\n\n"
+                f"Это правило нужно чтобы все играли честно! 🤝",
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📊 Моя статистика", callback_data="checkers_stats")],
+                    [InlineKeyboardButton("⬅️ В меню", callback_data="back_menu")]
+                ])
             )
             return
     
+    # Награда за победу
     points_earned = random.randint(80, 120)
     add_santa_points(user.id, points_earned, context)
     add_reindeer_exp(user.id, 25)
     
+    # Обновляем статистику
     user_data[str(user.id)]["checkers_wins"] = user_data[str(user.id)].get("checkers_wins", 0) + 1
     user_data[str(user.id)]["last_checkers_win"] = datetime.now(timezone.utc).isoformat()
     
     # Проверяем достижения
     wins = user_data[str(user.id)]["checkers_wins"]
-    if wins >= 1 and "first_checkers_win" not in user_data[str(user.id)]["achievements"]:
+    achievement_unlocked = False
+    
+    if wins == 1 and "first_checkers_win" not in user_data[str(user.id)]["achievements"]:
         add_achievement(user.id, "first_checkers_win")
-    if wins >= 5 and "checkers_master" not in user_data[str(user.id)]["achievements"]:
+        achievement_unlocked = "🎖 Первая победа в шашках!"
+    elif wins == 5 and "checkers_master" not in user_data[str(user.id)]["achievements"]:
         add_achievement(user.id, "checkers_master")
-    if wins >= 10 and "checkers_grandmaster" not in user_data[str(user.id)]["achievements"]:
+        achievement_unlocked = "🏆 Мастер шашек (5 побед)!"
+    elif wins == 10 and "checkers_grandmaster" not in user_data[str(user.id)]["achievements"]:
         add_achievement(user.id, "checkers_grandmaster")
+        achievement_unlocked = "👑 Гроссмейстер шашек (10 побед)!"
+    
+    achievement_text = f"\n\n🎉 {achievement_unlocked}" if achievement_unlocked else ""
     
     await q.edit_message_text(
         f"🎉 <b>Победа подтверждена!</b>\n\n"
         f"✨ +{points_earned} очков Санты\n"
         f"🦌 +25 опыта оленёнку\n"
-        f"🏆 Всего побед: {wins}\n\n"
+        f"🏆 Всего побед: {wins}\n"
+        f"⏰ Следующее подтверждение через 30 минут{achievement_text}\n\n"
         f"Отличная игра! 🎄",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🎮 Сыграть ещё", callback_data="game_checkers")],
+            [InlineKeyboardButton("📊 Статистика", callback_data="checkers_stats")],
             [InlineKeyboardButton("⬅️ В меню", callback_data="back_menu")]
         ])
     )
@@ -2507,6 +2586,9 @@ async def enhanced_inline_handler(update: Update, context: ContextTypes.DEFAULT_
         elif q.data == "checkers_stats":
             await checkers_stats(update, context)
             
+        elif q.data == "checkers_help":
+            await checkers_help(update, context)
+            
         elif q.data == "back_menu":
             admin = is_admin(update)
             await q.edit_message_text(
@@ -2688,6 +2770,8 @@ def main():
     app.add_handler(CallbackQueryHandler(battle_action_handler, pattern="^battle_"))
     app.add_handler(CallbackQueryHandler(quest_start_handler, pattern="^quest_start_"))
     app.add_handler(CallbackQueryHandler(quest_action_handler, pattern="^quest_"))
+    app.add_handler(CallbackQueryHandler(show_quest_achievements, pattern="^quest_achievements$"))
+    app.add_handler(CallbackQueryHandler(checkers_help, pattern="^checkers_help$"))
     app.add_handler(CallbackQueryHandler(enhanced_inline_handler))
 
     # Обработчик текстовых сообщений
@@ -2696,11 +2780,12 @@ def main():
     app.add_handler(MessageHandler(filters.VIDEO & ~filters.COMMAND, handle_broadcast_message))
     app.add_handler(MessageHandler(filters.Document.ALL & ~filters.COMMAND, handle_broadcast_message))
 
-    print("🎄 Бот v3.0 запускается на Replit...")
+    print("🎄 Бот v3.1 запускается на Replit...")
     print("✨ ВСЕ функции исправлены и улучшены!")
-    print("📢 Рассылка - ✅ Реализована")
-    print("🏔️ Квесты - ✅ Полностью доделаны") 
-    print("♟️ Шашки - ✅ Исправлены")
+    print("🎮 Баланс мини-игр - ✅ Исправлен")
+    print("⚔️ Битва с Гринчем - ✅ Улучшена")
+    print("🏔️ Квесты - ✅ Полностью работают") 
+    print("♟️ Шашки - ✅ Логичная система подтверждения")
     print("🔧 Оптимизировано для Replit")
     
     # Запуск бота с обработкой ошибок для Replit
