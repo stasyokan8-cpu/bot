@@ -1,5 +1,5 @@
-# 🔥🎄 SUPER-DELUXE SECRET SANTA BOT v2.0 🎄🔥
-# УЛУЧШЕННАЯ ВЕРСИЯ: эпичная битва с Гринчем, продвинутые квесты, система очков, шашки!
+# 🔥🎄 SUPER-DELUXE SECRET SANTA BOT v2.2 🎄🔥
+# ПОЛНАЯ ВЕРСИЯ: интеграция с шашками, рассылка, новогодний квиз
 
 import json
 import random
@@ -19,7 +19,7 @@ TOKEN = "8299215190:AAEqLfMOTjywx_jOeT-Kv1I5oKdgbdWzN9Y"
 ADMIN_USERNAME = "BeellyKid"
 DATA_FILE = "santa_data.json"
 
-print(f"🎄 Запуск Secret Santa Bot v2.0...")
+print(f"🎄 Запуск Secret Santa Bot v2.2...")
 
 user_data = {}
 
@@ -45,7 +45,7 @@ def save_data(data):
         print(f"Ошибка сохранения данных: {e}")
 
 # -------------------------------------------------------------------
-# БАЗОВЫЕ УТИЛИТЫ ИЗ ОРИГИНАЛЬНОГО КОДА
+# БАЗОВЫЕ УТИЛИТЫ
 # -------------------------------------------------------------------
 def is_admin(update: Update):
     return update.effective_user.username == ADMIN_USERNAME
@@ -64,18 +64,34 @@ def toast_of_day():
         "✨ Желаю зарплаты как у Илон Маска, а забот — как у кота!",
         "🎁 Пусть удача прилипнет, как блёстки после корпоратива!",
         "❄️ Пусть счастье валит в дом, как снег в Сибири — неожиданно и много!",
+        "🥂 Пусть каждый день нового года будет как первый день отпуска!",
+        "🎅 Желаю, чтобы под ёлкой всегда находилось именно то, о чём мечталось!",
+        "🌟 Пусть звёзды с неба достаются без особых усилий!",
+        "🍪 Пусть печеньки всегда будут свежими, а настроение — отличным!",
+        "🦌 Желаю, чтобы олени в жизни были только послушными!",
+        "🎶 Пусть новогодние песни звучат только в радость!",
+        "🍾 Желаю, чтобы шампанское било через край, а проблемы — мимо!",
+        "🕯️ Пусть огоньки гирлянд освещают только счастливые моменты!",
+        "❄️ Желаю морозных узоров на окнах и тепла в сердце!",
+        "🎁 Пусть сюрпризы будут только приятными!",
+        "🍬 Желаю сладкой жизни без горьких проблесков!",
+        "🕰️ Пусть бой курантов приносит только хорошие новости!",
+        "🎪 Желаю, чтобы жизнь была цирком, где ты — главный акробат!",
+        "🧦 Пусть носки всегда парные, а мысли — ясные!",
+        "🔥 Желаю, чтобы камин горел, а проблемы — нет!",
+        "🎊 Пусть фейерверки эмоций затмят все печали!"
     ]
     return random.choice(TOASTS)
 
 # -------------------------------------------------------------------
-# УЛУЧШЕННАЯ СИСТЕМА ОЧКОВ И ОЛЕНЕЙ
+# СИСТЕМА ОЧКОВ И ОЛЕНЕЙ
 # -------------------------------------------------------------------
 def init_user_data(user_id):
     if str(user_id) not in user_data:
         user_data[str(user_id)] = {
             "reindeer_level": 0,
             "reindeer_exp": 0,
-            "santa_points": 100,  # Новая валюта
+            "santa_points": 100,
             "achievements": [],
             "games_won": 0,
             "quests_finished": 0,
@@ -86,7 +102,11 @@ def init_user_data(user_id):
             "unlocked_reindeers": ["default"],
             "current_reindeer": "default",
             "checkers_wins": 0,
-            "total_points": 0
+            "checkers_losses": 0,
+            "quiz_wins": 0,
+            "total_points": 0,
+            "name": "",
+            "username": ""
         }
 
 def add_santa_points(user_id, points, context: ContextTypes.DEFAULT_TYPE = None):
@@ -94,7 +114,6 @@ def add_santa_points(user_id, points, context: ContextTypes.DEFAULT_TYPE = None)
     user_data[str(user_id)]["santa_points"] += points
     user_data[str(user_id)]["total_points"] += points
     
-    # Уведомление о крупных выигрышах/проигрышах
     if context and abs(points) >= 50:
         try:
             context.bot.send_message(
@@ -115,24 +134,23 @@ def add_reindeer_exp(user_id, amount):
         user_data[str(user_id)]["reindeer_level"] += 1
         user_data[str(user_id)]["reindeer_exp"] = 0
         
-        # РАСШИРЕННАЯ СИСТЕМА ЭВОЛЮЦИИ ОЛЕНЕЙ
         new_skin = None
         evolution_chance = random.random()
         
         if current_level + 1 == 3:
-            if evolution_chance < 0.1:  # 10% шанс
+            if evolution_chance < 0.1:
                 new_skin = "rainbow"
-            elif evolution_chance < 0.02:  # 2% шанс
+            elif evolution_chance < 0.02:
                 new_skin = "ice_spirit"
         elif current_level + 1 == 4:
-            if evolution_chance < 0.08:  # 8% шанс
+            if evolution_chance < 0.08:
                 new_skin = "golden"
-            elif evolution_chance < 0.015:  # 1.5% шанс
+            elif evolution_chance < 0.015:
                 new_skin = "crystal"
         elif current_level + 1 == 5:
-            if evolution_chance < 0.05:  # 5% шанс
+            if evolution_chance < 0.05:
                 new_skin = "cosmic"
-            elif evolution_chance < 0.01:  # 1% шанс
+            elif evolution_chance < 0.01:
                 new_skin = "phantom"
         
         if new_skin:
@@ -147,7 +165,6 @@ def add_achievement(user_id, achievement_key):
     init_user_data(user_id)
     if achievement_key not in user_data[str(user_id)]["achievements"]:
         user_data[str(user_id)]["achievements"].append(achievement_key)
-        # Награда за достижение
         add_santa_points(user_id, 50)
 
 # -------------------------------------------------------------------
@@ -204,12 +221,16 @@ def generate_gift_idea():
     return f"{category}:\n{gift}\n{budget}"
 
 # -------------------------------------------------------------------
-# ОСНОВНЫЕ КОМАНДЫ ИЗ ОРИГИНАЛЬНОГО КОДА
+# ОСНОВНЫЕ КОМАНДЫ
 # -------------------------------------------------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     admin = is_admin(update)
     init_user_data(user.id)
+    
+    # Сохраняем данные пользователя
+    user_data[str(user.id)]["name"] = user.full_name
+    user_data[str(user.id)]["username"] = user.username or "без username"
     
     await update.message.reply_text(
         f"🎄 Добро пожаловать, {user.first_name}! 🎅\n\n"
@@ -525,7 +546,6 @@ async def show_top_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 medal = f"{i+1}."
             
-            # Используем имя из данных пользователя
             user_name = data.get("name", f"Игрок {user_id}")
             top_text += f"{medal} {user_name} — {score} очков\n"
     
@@ -861,48 +881,591 @@ async def process_quest_choice(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
 # -------------------------------------------------------------------
-# СИСТЕМА ШАШЕК (базовая реализация)
+# НОВОГОДНИЙ КВИЗ
 # -------------------------------------------------------------------
-async def checkers_challenge(update: Update, context: ContextTypes.DEFAULT_TYPE):
+NEW_YEAR_QUIZ = [
+    {
+        "question": "🎄 В какой стране начали наряжать ёлку на Новый год?",
+        "options": ["🇩🇪 Германия", "🇷🇺 Россия", "🇺🇸 США", "🇫🇷 Франция"],
+        "correct": 0,
+        "fact": "Традиция наряжать ёлку зародилась в Германии в XVI веке!"
+    },
+    {
+        "question": "⭐ Сколько лучей у снежинки?",
+        "options": ["4", "6", "8", "10"],
+        "correct": 1,
+        "fact": "Правильно! У снежинки всегда 6 лучей из-за кристаллической структуры льда."
+    },
+    {
+        "question": "🎅 Как зовут оленя с красным носом?",
+        "options": ["Рудольф", "Дашер", "Дансер", "Комет"],
+        "correct": 0,
+        "fact": "Рудольф — самый известный олень Санты с красным светящимся носом!"
+    },
+    {
+        "question": "🕛 Во сколько бьют куранты в новогоднюю ночь?",
+        "options": ["23:55", "00:00", "00:05", "00:10"],
+        "correct": 1,
+        "fact": "Куранты бьют ровно в полночь, символизируя наступление Нового года!"
+    },
+    {
+        "question": "🍪 Кто обычно оставляет подарки под ёлкой в России?",
+        "options": ["Санта Клаус", "Дед Мороз", "Снегурочка", "Йоулупукки"],
+        "correct": 1,
+        "fact": "В России подарки под ёлкой оставляет Дед Мороз со своей внучкой Снегурочкой!"
+    },
+    {
+        "question": "🌟 Какой цвет традиционно считается новогодним?",
+        "options": ["Красный", "Зелёный", "Золотой", "Все варианты"],
+        "correct": 3,
+        "fact": "Все три цвета — красный, зелёный и золотой — считаются традиционными новогодними!"
+    },
+    {
+        "question": "🎁 Что принято делать под бой курантов?",
+        "options": ["Загадывать желание", "Обниматься", "Кричать 'Ура!'", "Все варианты"],
+        "correct": 3,
+        "fact": "Под бой курантов принято загадывать желание, обниматься и кричать 'Ура!'"
+    },
+    {
+        "question": "🦌 Сколько оленей в упряжке Санта Клауса?",
+        "options": ["8", "9", "10", "12"],
+        "correct": 1,
+        "fact": "У Санты 9 оленей: Дашер, Дэнсер, Прэнсер, Виксен, Комет, Кьюпид, Дондер, Блитцен и Рудольф!"
+    },
+    {
+        "question": "❄️ Какой самый популярный новогодний фильм?",
+        "options": ["Один дома", "Один дома 2", "Этажом выше", "Красотка"],
+        "correct": 0,
+        "fact": "'Один дома' — самый популярный новогодний фильм всех времён!"
+    },
+    {
+        "question": "🍾 Что традиционно пьют в новогоднюю ночь?",
+        "options": ["Шампанское", "Водку", "Сок", "Все варианты"],
+        "correct": 3,
+        "fact": "В разных странах и семьях традиции разные, но шампанское — самый популярный напиток!"
+    }
+]
+
+async def start_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    
+    context.user_data["quiz"] = {
+        "score": 0,
+        "current_question": 0,
+        "questions": random.sample(NEW_YEAR_QUIZ, 5)  # 5 случайных вопросов
+    }
+    
+    await ask_quiz_question(update, context)
+
+async def ask_quiz_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    quiz_data = context.user_data["quiz"]
+    current_q = quiz_data["current_question"]
+    
+    if current_q >= len(quiz_data["questions"]):
+        await finish_quiz(update, context)
+        return
+    
+    question_data = quiz_data["questions"][current_q]
+    
+    keyboard = []
+    for i, option in enumerate(question_data["options"]):
+        keyboard.append([InlineKeyboardButton(option, callback_data=f"quiz_answer_{i}")])
+    
+    progress = f"({current_q + 1}/{len(quiz_data['questions'])})"
+    
+    await update.callback_query.edit_message_text(
+        f"🎓 Новогодний Квиз {progress}\n\n"
+        f"❓ {question_data['question']}",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def process_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     
+    user_answer = int(q.data.split("_")[2])
+    quiz_data = context.user_data["quiz"]
+    current_q = quiz_data["current_question"]
+    question_data = quiz_data["questions"][current_q]
+    
+    is_correct = user_answer == question_data["correct"]
+    
+    if is_correct:
+        quiz_data["score"] += 1
+        result_text = "✅ Правильно!"
+    else:
+        correct_answer = question_data["options"][question_data["correct"]]
+        result_text = f"❌ Неправильно! Правильный ответ: {correct_answer}"
+    
+    # Показываем факт
+    result_text += f"\n\n💡 {question_data['fact']}"
+    
+    # Кнопка для продолжения
+    keyboard = [[InlineKeyboardButton("➡️ Следующий вопрос", callback_data="quiz_next")]]
+    
     await q.edit_message_text(
-        "♟️ Вызов на шашки\n\n"
-        "Чтобы сыграть в шашки с другим участником:\n\n"
-        "1. Узнай его ID (он может получить его через /myid)\n"
-        "2. Используй команду:\n"
-        "   /challenge @username\n\n"
-        "Или напиши мне ID пользователя:",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🆔 Мой ID", callback_data="get_my_id")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="mini_games")]
-        ])
+        result_text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-async def start_checkers_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Базовая реализация вызова
-    if context.args:
-        target = context.args[0]
-        challenger = update.effective_user
-        
-        await update.message.reply_text(
-            f"♟️ {challenger.first_name} вызывает на шашки пользователя {target}!\n\n"
-            f"Игра будет реализована в следующем обновлении! 🎮"
-        )
+async def next_quiz_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    
+    context.user_data["quiz"]["current_question"] += 1
+    await ask_quiz_question(update, context)
 
-async def get_my_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def finish_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    quiz_data = context.user_data["quiz"]
+    score = quiz_data["score"]
+    total = len(quiz_data["questions"])
+    
     user = update.effective_user
+    init_user_data(user.id)
+    
+    # Начисление очков в зависимости от результата
+    if score == total:  # Все правильно
+        points = 150
+        add_achievement(user.id, "quiz_master")
+        result_message = "🎉 ИДЕАЛЬНО! Ты настоящий новогодний эксперт!"
+    elif score >= total * 0.7:  # Больше 70%
+        points = 100
+        result_message = "🎊 Отличный результат! Ты хорошо знаешь новогодние традиции!"
+    elif score >= total * 0.5:  # Больше 50%
+        points = 60
+        result_message = "👍 Хороший результат! Есть что вспомнить о Новом годе!"
+    else:
+        points = 30
+        result_message = "📚 Неплохо! Новогодние традиции — это интересно!"
+    
+    add_santa_points(user.id, points, context)
+    add_reindeer_exp(user.id, score * 10)
+    user_data[str(user.id)]["games_won"] += 1
+    user_data[str(user.id)]["quiz_wins"] = user_data[str(user.id)].get("quiz_wins", 0) + 1
+    
+    final_text = f"""
+🎓 Новогодний Квиз завершён!
+
+{result_message}
+
+📊 Твой результат: {score}/{total}
+✨ Получено очков: {points}
+🦌 Опыта оленёнку: {score * 10}
+
+Хочешь попробовать ещё раз?
+"""
+    
+    keyboard = [
+        [InlineKeyboardButton("🔄 Пройти ещё раз", callback_data="game_quiz")],
+        [InlineKeyboardButton("⬅️ В меню", callback_data="back_menu")]
+    ]
+    
     await update.callback_query.edit_message_text(
-        f"🆔 Твой ID: {user.id}\n\n"
-        f"Дай этот ID другу, чтобы он мог вызвать тебя на шашки!",
+        final_text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# -------------------------------------------------------------------
+# ИНТЕГРАЦИЯ С GOPLAYBOT ДЛЯ ШАШЕК
+# -------------------------------------------------------------------
+async def checkers_integration(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    
+    instructions = """
+♟️ Игра в шашки через @goplaybot
+
+Как играть:
+
+1. Напиши @goplaybot в любом чате
+2. Выбери опцию "Checkers" (Шашки)
+3. Пригласи друга сыграть с тобой
+4. После игры сделай скриншот результата
+
+Чтобы зарегистрировать результат в нашем боте:
+
+• Победитель: используй /report_win @username_противника
+• Проигравший: используй /report_loss @username_победителя
+
+Или оба игрока могут подтвердить результат через меню ниже!
+"""
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎮 Начать игру в шашки", url="https://t.me/goplaybot?start=checkers")],
+        [InlineKeyboardButton("✅ Подтвердить победу", callback_data="confirm_win_menu")],
+        [InlineKeyboardButton("❌ Подтвердить поражение", callback_data="confirm_loss_menu")],
+        [InlineKeyboardButton("📊 Статистика шашек", callback_data="checkers_stats")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="mini_games")]
+    ])
+    
+    await update.callback_query.edit_message_text(instructions, reply_markup=keyboard)
+
+async def confirm_win_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    
+    # Получаем список участников комнаты для выбора противника
+    data = load_data()
+    user = update.effective_user
+    room_members = []
+    
+    for code, room in data["rooms"].items():
+        if str(user.id) in room["members"]:
+            for member_id, member_data in room["members"].items():
+                if member_id != str(user.id):
+                    room_members.append({
+                        "id": member_id,
+                        "name": member_data["name"],
+                        "username": member_data["username"]
+                    })
+    
+    if not room_members:
+        await update.callback_query.edit_message_text(
+            "❌ Ты не в комнате или в комнате нет других участников!",
+            reply_markup=back_to_menu_keyboard()
+        )
+        return
+    
+    keyboard = []
+    for member in room_members:
+        display_name = f"{member['name']} (@{member['username']})" if member['username'] != "без username" else member['name']
+        keyboard.append([InlineKeyboardButton(
+            f"🎯 Победил против {display_name}",
+            callback_data=f"confirm_win_{member['id']}"
+        )])
+    
+    keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="game_checkers")])
+    
+    await update.callback_query.edit_message_text(
+        "Выбери противника, которого ты победил в шашках:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def confirm_loss_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    
+    data = load_data()
+    user = update.effective_user
+    room_members = []
+    
+    for code, room in data["rooms"].items():
+        if str(user.id) in room["members"]:
+            for member_id, member_data in room["members"].items():
+                if member_id != str(user.id):
+                    room_members.append({
+                        "id": member_id,
+                        "name": member_data["name"],
+                        "username": member_data["username"]
+                    })
+    
+    if not room_members:
+        await update.callback_query.edit_message_text(
+            "❌ Ты не в комнате или в комнате нет других участников!",
+            reply_markup=back_to_menu_keyboard()
+        )
+        return
+    
+    keyboard = []
+    for member in room_members:
+        display_name = f"{member['name']} (@{member['username']})" if member['username'] != "без username" else member['name']
+        keyboard.append([InlineKeyboardButton(
+            f"💀 Проиграл против {display_name}",
+            callback_data=f"confirm_loss_{member['id']}"
+        )])
+    
+    keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="game_checkers")])
+    
+    await update.callback_query.edit_message_text(
+        "Выбери противника, которому ты проиграл в шашках:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def process_checkers_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    data_parts = q.data.split("_")
+    result_type = data_parts[2]  # win или loss
+    opponent_id = data_parts[3]
+    
+    user = update.effective_user
+    init_user_data(user.id)
+    init_user_data(opponent_id)
+    
+    if result_type == "win":
+        # Начисляем очки победителю
+        points_earned = random.randint(80, 120)
+        add_santa_points(user.id, points_earned, context)
+        user_data[str(user.id)]["checkers_wins"] += 1
+        add_reindeer_exp(user.id, 25)
+        
+        # Вычитаем очки у проигравшего (меньше)
+        points_lost = random.randint(20, 40)
+        add_santa_points(opponent_id, -points_lost, context)
+        user_data[str(opponent_id)]["checkers_losses"] += 1
+        
+        # Получаем имя противника
+        opponent_name = user_data[opponent_id].get("name", "Игрок")
+        
+        await q.edit_message_text(
+            f"♟️ Победа зарегистрирована! 🎉\n\n"
+            f"Ты победил {opponent_name} в шашках!\n\n"
+            f"✨ Награды:\n"
+            f"• +{points_earned} очков Санты\n"
+            f"• +25 опыта оленёнку\n"
+            f"• Запись в статистике\n\n"
+            f"Противник теряет {points_lost} очков",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📊 Статистика", callback_data="checkers_stats")],
+                [InlineKeyboardButton("⬅️ В меню", callback_data="back_menu")]
+            ])
+        )
+        
+        # Уведомляем противника
+        try:
+            await context.bot.send_message(
+                opponent_id,
+                f"♟️ {user.first_name} зарегистрировал вашу игру в шашках.\n"
+                f"Результат: поражение 😔\n"
+                f"Потеряно: {points_lost} очков Санты"
+            )
+        except:
+            pass
+        
+    else:  # loss
+        # Начисляем очки победителю (противнику)
+        points_earned = random.randint(80, 120)
+        add_santa_points(opponent_id, points_earned, context)
+        user_data[str(opponent_id)]["checkers_wins"] += 1
+        
+        # Вычитаем очки у проигравшего (игрока)
+        points_lost = random.randint(20, 40)
+        add_santa_points(user.id, -points_lost, context)
+        user_data[str(user.id)]["checkers_losses"] += 1
+        
+        # Получаем имя противника
+        opponent_name = user_data[opponent_id].get("name", "Игрок")
+        
+        await q.edit_message_text(
+            f"♟️ Поражение зарегистрировано 💀\n\n"
+            f"Ты проиграл {opponent_name} в шашках\n\n"
+            f"😔 Потеряно: {points_lost} очков Санты\n\n"
+            f"Не расстраивайся! Удачи в следующей иче!",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📊 Статистика", callback_data="checkers_stats")],
+                [InlineKeyboardButton("⬅️ В меню", callback_data="back_menu")]
+            ])
+        )
+        
+        # Уведомляем противника
+        try:
+            await context.bot.send_message(
+                opponent_id,
+                f"♟️ {user.first_name} подтвердил вашу победу в шашках! 🎉\n"
+                f"Получено: +{points_earned} очков Санты!"
+            )
+        except:
+            pass
+
+async def show_checkers_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    init_user_data(user.id)
+    
+    user_info = user_data[str(user.id)]
+    wins = user_info["checkers_wins"]
+    losses = user_info["checkers_losses"]
+    total_games = wins + losses
+    win_rate = (wins / total_games * 100) if total_games > 0 else 0
+    
+    stats_text = f"""
+♟️ Статистика шашек:
+
+🎯 Побед: {wins}
+💀 Поражений: {losses}
+📊 Всего игр: {total_games}
+🏆 Процент побед: {win_rate:.1f}%
+
+🏅 Рейтинг: {"Новичок" if wins < 3 else "Любитель" if wins < 10 else "Профи" if wins < 25 else "Мастер" if wins < 50 else "Гроссмейстер"}
+"""
+    
+    await update.callback_query.edit_message_text(
+        stats_text,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("⬅️ Назад к шашкам", callback_data="game_checkers")]
+            [InlineKeyboardButton("🎮 Играть в шашки", callback_data="game_checkers")],
+            [InlineKeyboardButton("⬅️ В меню", callback_data="back_menu")]
         ])
     )
 
 # -------------------------------------------------------------------
-# ОБНОВЛЁННЫЕ МЕНЮ И ОБРАБОТЧИКИ
+# СИСТЕМА РАССЫЛКИ ДЛЯ АДМИНА
+# -------------------------------------------------------------------
+async def broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        await update.callback_query.answer("🚫 Доступ запрещён", show_alert=True)
+        return
+    
+    await update.callback_query.answer()
+    
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📢 Всем пользователям", callback_data="broadcast_all")],
+        [InlineKeyboardButton("🎄 Участникам комнат", callback_data="broadcast_rooms")],
+        [InlineKeyboardButton("📊 Статистика рассылки", callback_data="broadcast_stats")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="back_menu")]
+    ])
+    
+    await update.callback_query.edit_message_text(
+        "📢 Система рассылки сообщений\n\n"
+        "Выбери категорию получателей:",
+        reply_markup=keyboard
+    )
+
+async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    broadcast_type = q.data.replace("broadcast_", "")
+    context.user_data["broadcast_type"] = broadcast_type
+    context.user_data["awaiting_broadcast"] = True
+    
+    recipient_type = "всем пользователям бота" if broadcast_type == "all" else "участникам комнат"
+    
+    await q.edit_message_text(
+        f"📢 Рассылка для {recipient_type}\n\n"
+        f"Напиши сообщение, которое нужно разослать:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("❌ Отмена", callback_data="broadcast_cancel")]
+        ])
+    )
+
+async def process_broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.user_data.get("awaiting_broadcast"):
+        return
+    
+    if not is_admin(update):
+        await update.message.reply_text("🚫 Доступ запрещён")
+        return
+    
+    message_text = update.message.text
+    broadcast_type = context.user_data.get("broadcast_type", "all")
+    
+    # Очищаем состояние
+    context.user_data["awaiting_broadcast"] = False
+    context.user_data["broadcast_type"] = None
+    
+    # Получаем список получателей
+    recipients = []
+    
+    if broadcast_type == "all":
+        # Все пользователи бота
+        for user_id in user_data.keys():
+            recipients.append(user_id)
+    else:  # rooms
+        # Только участники комнат
+        data = load_data()
+        for room in data["rooms"].values():
+            for user_id in room["members"].keys():
+                if user_id not in recipients:
+                    recipients.append(user_id)
+    
+    total_recipients = len(recipients)
+    successful_sends = 0
+    failed_sends = 0
+    
+    # Отправляем сообщение с прогрессом
+    progress_msg = await update.message.reply_text(
+        f"📤 Начинаю рассылку...\nПолучателей: {total_recipients}\nУспешно: 0\nОшибок: 0"
+    )
+    
+    # Рассылаем сообщения
+    for i, user_id in enumerate(recipients):
+        try:
+            await context.bot.send_message(
+                chat_id=int(user_id),
+                text=f"📢 Сообщение от Администратора:\n\n{message_text}\n\n— 🎅 Тайный Санта Бот"
+            )
+            successful_sends += 1
+        except Exception as e:
+            print(f"Ошибка отправки пользователю {user_id}: {e}")
+            failed_sends += 1
+        
+        # Обновляем прогресс каждые 10 сообщений
+        if i % 10 == 0:
+            try:
+                await progress_msg.edit_text(
+                    f"📤 Рассылка...\nПолучателей: {total_recipients}\n"
+                    f"Успешно: {successful_sends}\nОшибок: {failed_sends}\n"
+                    f"Прогресс: {i+1}/{total_recipients}"
+                )
+            except:
+                pass
+        
+        # Небольшая задержка чтобы не превысить лимиты Telegram
+        await asyncio.sleep(0.1)
+    
+    # Финальный отчет
+    report_text = f"""
+📊 Отчёт о рассылке:
+
+✅ Успешно: {successful_sends}
+❌ Ошибок: {failed_sends}
+📋 Всего: {total_recipients}
+
+💬 Тип рассылки: {'Всем пользователям' if broadcast_type == 'all' else 'Участникам комнат'}
+"""
+    
+    await progress_msg.edit_text(report_text)
+    await update.message.reply_text(
+        "✅ Рассылка завершена!",
+        reply_markup=back_to_menu_keyboard(True)
+    )
+
+async def broadcast_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    context.user_data["awaiting_broadcast"] = False
+    context.user_data["broadcast_type"] = None
+    
+    admin = is_admin(update)
+    await q.edit_message_text(
+        "❌ Рассылка отменена",
+        reply_markup=enhanced_menu_keyboard(admin)
+    )
+
+async def broadcast_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        await update.callback_query.answer("🚫 Доступ запрещён", show_alert=True)
+        return
+    
+    total_users = len(user_data)
+    
+    data = load_data()
+    room_users = set()
+    for room in data["rooms"].values():
+        for user_id in room["members"].keys():
+            room_users.add(user_id)
+    
+    active_room_users = len(room_users)
+    
+    stats_text = f"""
+📊 Статистика пользователей:
+
+👤 Всего пользователей бота: {total_users}
+🎄 Участников комнат: {active_room_users}
+🏠 Активных комнат: {len(data['rooms'])}
+
+💡 Для рассылки:
+• Всем пользователям: {total_users} чел.
+• Участникам комнат: {active_room_users} чел.
+"""
+    
+    await update.callback_query.edit_message_text(
+        stats_text,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("📢 Начать рассылку", callback_data="broadcast_all")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="broadcast_menu")]
+        ])
+    )
+
+# -------------------------------------------------------------------
+# ОБНОВЛЁННОЕ МЕНЮ И ПРОФИЛЬ
 # -------------------------------------------------------------------
 def enhanced_menu_keyboard(admin=False):
     base = [
@@ -923,18 +1486,10 @@ def enhanced_menu_keyboard(admin=False):
             [InlineKeyboardButton("🚀 Админ: Запуск игры", callback_data="admin_start")],
             [InlineKeyboardButton("📜 Админ: Пожелания", callback_data="admin_wishes")],
             [InlineKeyboardButton("🔀 Админ: Кому кто", callback_data="admin_map")],
+            [InlineKeyboardButton("📢 Админ: Рассылка", callback_data="broadcast_menu")],
         ])
     base.append([InlineKeyboardButton("🎅 Присоединиться к комнате", callback_data="join_room_menu")])
     return InlineKeyboardMarkup(base)
-
-async def enhanced_gift_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    idea = generate_gift_idea()
-    await update.callback_query.answer()
-    await update.callback_query.edit_message_text(
-        f"🎁 Идея подарка:\n\n{idea}\n\n"
-        f"💡 Совет: учитывай интересы получателя!",
-        reply_markup=back_to_menu_keyboard()
-    )
 
 async def enhanced_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -986,6 +1541,7 @@ async def enhanced_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 💎 Редких предметов: {len(user_info['rare_items'])}
 ♟️ Побед в шашках: {user_info.get('checkers_wins', 0)}
+🎓 Побед в квизе: {user_info.get('quiz_wins', 0)}
 """
 
     if update.callback_query:
@@ -999,6 +1555,15 @@ async def enhanced_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_menu_keyboard()
         )
 
+async def enhanced_gift_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    idea = generate_gift_idea()
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text(
+        f"🎁 Идея подарка:\n\n{idea}\n\n"
+        f"💡 Совет: учитывай интересы получателя!",
+        reply_markup=back_to_menu_keyboard()
+    )
+
 # -------------------------------------------------------------------
 # ОБНОВЛЁННЫЕ ОБРАБОТЧИКИ ИГР
 # -------------------------------------------------------------------
@@ -1008,6 +1573,8 @@ async def mini_game_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🎯 Угадай число", callback_data="game_number")],
         [InlineKeyboardButton("🧊 Монетка судьбы", callback_data="game_coin")],
         [InlineKeyboardButton("⚔️ Битва с Гринчем", callback_data="game_grinch")],
+        [InlineKeyboardButton("🎓 Новогодний квиз", callback_data="game_quiz")],
+        [InlineKeyboardButton("♟️ Шашки", callback_data="game_checkers")],
         [InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_menu")],
     ])
     await update.callback_query.edit_message_text("🎮 Мини-игры! Выбирай:", reply_markup=kb)
@@ -1087,8 +1654,29 @@ async def enhanced_game_handler(update: Update, context: ContextTypes.DEFAULT_TY
     elif q.data == "game_grinch":
         await epic_grinch_battle(update, context)
         
+    elif q.data == "game_quiz":
+        await start_quiz(update, context)
+        
+    elif q.data == "quiz_next":
+        await next_quiz_question(update, context)
+        
+    elif q.data.startswith("quiz_answer_"):
+        await process_quiz_answer(update, context)
+        
     elif q.data == "game_checkers":
-        await checkers_challenge(update, context)
+        await checkers_integration(update, context)
+        
+    elif q.data.startswith("confirm_win_") or q.data.startswith("confirm_loss_"):
+        await process_checkers_result(update, context)
+        
+    elif q.data == "confirm_win_menu":
+        await confirm_win_menu(update, context)
+        
+    elif q.data == "confirm_loss_menu":
+        await confirm_loss_menu(update, context)
+        
+    elif q.data == "checkers_stats":
+        await show_checkers_stats(update, context)
         
     elif q.data == "battle_attack":
         await battle_action(update, context)
@@ -1202,6 +1790,17 @@ async def enhanced_inline_handler(update: Update, context: ContextTypes.DEFAULT_
     elif q.data == "join_room_menu":
         await join_room_menu(update, context)
         
+    elif q.data == "broadcast_menu":
+        await broadcast_menu(update, context)
+        
+    elif q.data.startswith("broadcast_"):
+        if "cancel" in q.data:
+            await broadcast_cancel(update, context)
+        elif "stats" in q.data:
+            await broadcast_stats(update, context)
+        else:
+            await start_broadcast(update, context)
+            
     elif q.data == "back_menu":
         admin = is_admin(update)
         await q.edit_message_text(
@@ -1240,6 +1839,47 @@ async def points(update: Update, context: ContextTypes.DEFAULT_TYPE):
     points = user_data[str(user.id)]["santa_points"]
     await update.message.reply_text(f"🎅 У тебя {points} очков Санты!")
 
+async def get_my_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    await update.callback_query.edit_message_text(
+        f"🆔 Твой ID: {user.id}\n\n"
+        f"Дай этот ID другу, чтобы он мог вызвать тебя на шашки!",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ Назад к шашкам", callback_data="game_checkers")]
+        ])
+    )
+
+# -------------------------------------------------------------------
+# КОМАНДЫ ДЛЯ РУЧНОГО ВВОДА РЕЗУЛЬТАТОВ ШАШЕК
+# -------------------------------------------------------------------
+async def report_win_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Использование: /report_win @username")
+        return
+    
+    opponent_mention = context.args[0]
+    await update.message.reply_text(
+        f"Для подтверждения победы над {opponent_mention} используй меню:\n"
+        f"🎮 Мини-игры → ♟️ Шашки → ✅ Подтвердить победу",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🎮 Перейти к шашкам", callback_data="game_checkers")]
+        ])
+    )
+
+async def report_loss_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Использование: /report_loss @username")
+        return
+    
+    opponent_mention = context.args[0]
+    await update.message.reply_text(
+        f"Для подтверждения поражения от {opponent_mention} используй меню:\n"
+        f"🎮 Мини-игры → ♟️ Шашки → ❌ Подтвердить поражение",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🎮 Перейти к шашкам", callback_data="game_checkers")]
+        ])
+    )
+
 # -------------------------------------------------------------------
 # ОСНОВНОЙ ЗАПУСК
 # -------------------------------------------------------------------
@@ -1258,14 +1898,12 @@ def main():
     app.add_handler(CommandHandler("profile", enhanced_profile))
     app.add_handler(CommandHandler("myid", my_id))
     app.add_handler(CommandHandler("points", points))
-    app.add_handler(CommandHandler("challenge", start_checkers_game))
+    app.add_handler(CommandHandler("report_win", report_win_command))
+    app.add_handler(CommandHandler("report_loss", report_loss_command))
 
     # Обработчики callback'ов
-    app.add_handler(CallbackQueryHandler(enhanced_inline_handler, pattern="^(wish|toast|admin_rooms|admin_wishes|admin_map|admin_start|profile|mini_games|quest_menu|gift_idea|snowfall|back_menu|join_room_menu|top_players|room_members)$"))
-    app.add_handler(CallbackQueryHandler(enhanced_game_handler, pattern="^game"))
-    app.add_handler(CallbackQueryHandler(enhanced_game_handler, pattern="^battle"))
-    app.add_handler(CallbackQueryHandler(enhanced_game_handler, pattern="^guess"))
-    app.add_handler(CallbackQueryHandler(enhanced_game_handler, pattern="^get_my_id"))
+    app.add_handler(CallbackQueryHandler(enhanced_inline_handler))
+    app.add_handler(CallbackQueryHandler(enhanced_game_handler))
     app.add_handler(CallbackQueryHandler(start_enhanced_quest, pattern="^quest_start"))
     app.add_handler(CallbackQueryHandler(process_quest_choice, pattern="^quest_choice"))
     app.add_handler(CallbackQueryHandler(start_specific_game, pattern="^start_"))
@@ -1273,9 +1911,10 @@ def main():
     # Обработчик текстовых сообщений
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, join_room))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_broadcast_message))
 
-    print("🎄 Бот v2.0 запускается...")
-    print("✨ Улучшенная битва с Гринчем, квесты, система очков!")
+    print("🎄 Бот v2.2 запускается...")
+    print("✨ Новогодний квиз + 20 тостов + полный функционал!")
     
     try:
         app.run_polling(
